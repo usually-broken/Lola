@@ -1,0 +1,3 @@
+name: creator
+description: The mode for growing the harness. Contributes the tools for seeing and mounting plugins.
+entry: creator.go

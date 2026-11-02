@@ -1,0 +1,2547 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lola</title>
+<style>
+/* ------------------------------------------------------------------
+   THE THEME
+
+   Every colour the page uses is here and nowhere else. Change these
+   and the whole interface follows — no other file needs touching.
+   ------------------------------------------------------------------ */
+:root {
+  --bg:          #ffffff;   /* the page */
+  --panel:       #f4f5f7;   /* recessed surfaces, like the sidebar */
+  --card:        #ffffff;   /* raised things: the composer, your messages */
+  --ink:         #0b0d10;   /* near-black text */
+  --muted:       #6b7280;   /* grey captions and labels */
+  --line:        #e6e7ea;   /* borders */
+  --accent:      #16213e;   /* navy: the one colour that carries */
+  --accent-soft: #eef0f4;   /* the palest fill, for a selected row */
+  --accent-ink:  #ffffff;   /* text on the accent */
+  --danger:      #b42318;   /* errors */
+
+  --radius:      10px;
+  --gap:         14px;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+/* ---- the frame ----------------------------------------------------------
+   Named places: a sidebar, the conversation, and a details column. The
+   sidebar and details are fixed widths; the conversation takes what is left.
+   Nothing here knows what goes in them.
+   ------------------------------------------------------------------------ */
+
+.shell {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+}
+
+.conversation {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+#details {
+  flex: 0 0 360px;
+  width: 360px;
+  min-width: 300px;
+  max-width: 520px;
+  border-left: 1px solid var(--line);
+  background: var(--bg);
+  overflow-y: auto;
+  padding: 14px;
+}
+
+#details[hidden] { display: none; }
+
+.pane-title {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 10px;
+}
+
+.pane-row { padding: 4px 0; }
+
+.pane-label {
+  display: block;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.pane-value { font-family: var(--mono); font-size: 12.5px; }
+
+.brand {
+  padding: 2px 10px 16px;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.side-foot {
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.side-foot button {
+  width: 100%;
+  padding: 9px 10px;
+  font-size: 13.5px;
+  font-weight: 400;
+  color: var(--muted);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.side-foot button:hover { background: var(--panel); color: var(--ink); }
+
+/* Folding the sidebar: it narrows to a rail rather than vanishing, so the
+   things you reach for stay reachable. Labels go, icons stay. */
+.side-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 2px 16px 10px;
+}
+
+.side-top .brand { padding: 0; }
+
+#collapseBtn {
+  padding: 4px 9px;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--muted);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+#collapseBtn:hover {
+  background: var(--card);
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+.new .icon, .side-foot .icon { display: none; }
+
+.shell.collapsed #side {
+  flex: 0 0 56px;
+  width: 56px;
+  min-width: 56px;
+  max-width: 56px;
+  padding: 12px 8px;
+  align-items: center;
+}
+
+.shell.collapsed .side-top {
+  padding: 0 0 14px;
+  justify-content: center;
+}
+
+.shell.collapsed .side-top .brand,
+.shell.collapsed #side h2,
+.shell.collapsed #sessions,
+.shell.collapsed .label { display: none; }
+
+.shell.collapsed .new,
+.shell.collapsed .side-foot button {
+  width: 38px;
+  padding: 8px 0;
+  text-align: center;
+}
+
+.shell.collapsed .new .icon,
+.shell.collapsed .side-foot .icon { display: inline; }
+
+#side {
+  /* 280 wide by default, clamped between 264 and 420, and collapsing to a 56px
+     rail below 1024. */
+  flex: 0 0 280px;
+  width: 280px;
+  min-width: 264px;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--line);
+  /* The sidebar is the recessed surface and the page is the raised one: the
+     other way round reads as a terminal. */
+  background: var(--panel);
+  overflow: hidden;
+  padding: 14px;
+}
+
+#side h2 {
+  margin: 0 0 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+#side h2:not(:first-child) { margin-top: 20px; }
+
+.new {
+  width: 100%;
+  margin-bottom: 14px;
+  padding: 9px 11px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.new:hover { border-color: var(--accent); color: var(--accent); }
+
+.list { display: flex; flex-direction: column; gap: 4px; }
+
+/* The list scrolls on its own, so everything above and below it stays put. */
+#sessions { flex: 1; min-height: 0; overflow-y: auto; }
+
+/* A session row: the button that opens it, and its delete beside it. */
+.session { display: flex; align-items: center; gap: 2px; }
+
+#sessions .session-open { flex: 1; min-width: 0; width: auto; }
+
+/* The × must not inherit the full-width rule the session buttons get, or it
+   claims the whole row and crushes the title beside it. */
+#sessions .session-del {
+  width: auto;
+  flex: 0 0 auto;
+  padding: 6px 8px;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+#sessions .session-del:hover { color: var(--danger); }
+
+.list button {
+  text-align: left;
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 13.5px;
+  font-weight: 400;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.list button:hover { background: var(--panel); }
+.list button.active { background: var(--card); border-color: var(--line); }
+
+/* Sans, not mono: the metadata is a caption, not a readout. */
+.list button .meta {
+  display: block;
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-top: 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.list .empty { font-size: 12px; color: var(--muted); padding: 4px 2px; }
+
+@media (max-width: 1024px) {
+  #side { display: none; }
+}
+
+#transcript {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 28px 24px;
+  background: var(--bg);
+}
+
+.wrap {
+  max-width: 760px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.msg {
+  padding: 11px 15px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--card);
+  word-wrap: break-word;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+
+/* What is inside a message: headings, lists, inline code and fenced code
+   blocks, so an answer reads as something written rather than dumped. */
+.msg p { margin: 0 0 9px; }
+.msg p:last-child { margin-bottom: 0; }
+.msg h3 { margin: 4px 0 8px; font-size: 15px; }
+.msg ul { margin: 0 0 9px; padding-left: 20px; }
+
+.msg code {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 1px 5px;
+}
+
+.msg pre {
+  margin: 9px 0;
+  padding: 11px 13px;
+  background: #0f172a;
+  border-radius: 8px;
+  overflow-x: auto;
+}
+
+.msg pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #e2e8f0;
+}
+
+.msg.you code { background: rgba(255, 255, 255, 0.18); border-color: transparent; color: inherit; }
+.msg.you pre { background: rgba(0, 0, 0, 0.25); }
+
+.msg.you {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  align-self: flex-end;
+  max-width: 78%;
+}
+
+/* No accent bar down the side: it reads as a quotation, and an answer is not
+   a quote. Just a quiet card. */
+.msg.lola {
+  border-color: var(--line);
+  box-shadow: none;
+}
+
+/* A tool call, as a soft chip rather than a line of monospace. */
+.step {
+  font-size: 12.5px;
+  color: var(--muted);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 12px;
+  align-self: flex-start;
+  max-width: 88%;
+  word-wrap: break-word;
+}
+
+.step b { color: var(--accent); font-weight: 600; }
+
+.err {
+  border-left: 3px solid var(--danger);
+  color: var(--danger);
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.note {
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+  padding: 8px 0;
+}
+
+/* The empty state. Centred in the space it has, so the pane reads as waiting
+   rather than as a gap with a line of text stuck near the top. */
+#transcript { display: flex; flex-direction: column; }
+
+.wrap { flex: 1; }
+
+.hero {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-align: center;
+}
+
+.hero .hi {
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.hero p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+footer {
+  padding: 10px 24px 18px;
+}
+
+/* The column, so the transcript scrolls while the composer stays put. */
+main.conversation { display: flex; flex-direction: column; min-height: 0; }
+
+#transcript { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+
+/* The bar at the bottom, and the two things in it. Centred by alignment
+   rather than by margin, so the picker row and the card share an axis. */
+footer {
+  padding: 10px 24px 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.above, #composer { width: 100%; max-width: 760px; }
+
+/* Signs, not only words: the sidebar's actions carry an icon. */
+.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0.75;
+}
+
+/* With nothing said, the composer sits in the middle of the window the way a
+   fresh session should, instead of being pinned to the bottom of an empty
+   page. Once there is something to read it drops back down. */
+main.conversation.is-empty #transcript { flex: 0 0 auto; }
+
+main.conversation.is-empty footer { flex: 1; justify-content: center; }
+
+main.conversation.is-empty .hero { flex: 0 0 auto; margin-bottom: 10px; }
+
+/* The row above the card: where the agent may write, and who has to approve
+   it. Both are chips, so they read as settings rather than as buttons you are
+   being asked to press. */
+.above {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--muted);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.chip:hover { color: var(--ink); background: var(--panel); border-color: var(--line); }
+
+.chip .ic { display: inline-flex; }
+.chip .cv { display: inline-flex; opacity: 0.6; }
+
+.chip select {
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: inherit;
+  background: none;
+  border: none;
+  outline: none;
+  cursor: pointer;
+  max-width: 320px;
+  appearance: none;
+}
+
+.chip select:disabled { cursor: default; }
+
+/* A selector offered by a plugin, drawn as a chip. It is a select, so the
+   browser's own box is turned off and the chip's border does the work — the
+   same treatment as the selector inside the page's own chips. */
+select.chip {
+  display: inline-flex;
+  align-items: center;
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 5px 9px;
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--muted);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+select.chip:hover { color: var(--ink); background: var(--panel); border-color: var(--line); }
+
+/* An id beats the browser's own [hidden] rule, so it has to be said again. */
+#providerPick[hidden] { display: none; }
+#providerCv[hidden] { display: none; }
+
+/* Folded, the sidebar becomes a rail of signs rather than a column of words. */
+.shell.collapsed #side { width: 64px; padding: 10px 8px; }
+.shell.collapsed #side .brand,
+.shell.collapsed #side h2,
+.shell.collapsed #side .list,
+.shell.collapsed #side .label { display: none; }
+.shell.collapsed .side-top { justify-content: center; }
+.shell.collapsed #newBtn,
+.shell.collapsed #settingsBtn { justify-content: center; padding-left: 0; padding-right: 0; }
+
+/* A table in an answer is a table, not a row of pipes. */
+.msg table { border-collapse: collapse; margin: 9px 0; font-size: 13.5px; }
+.msg th, .msg td { border: 1px solid var(--line); padding: 5px 9px; text-align: left; }
+.msg th { background: var(--panel); font-weight: 600; }
+.msg.you th, .msg.you td { border-color: rgba(255, 255, 255, 0.28); }
+.msg.you th { background: rgba(255, 255, 255, 0.12); }
+
+/* A contribution is wrapped in a span so the page can find it again and clear
+   it. That wrapper is not part of the design: taking it out of the layout means
+   a fragment lays itself out against the place it was drawn into, rather than
+   against an inline span that shrinks to its own text. */
+[data-contribution] { display: contents; }
+
+/* The place the composer is drawn into has to be a block, or the card inside it
+   measures itself against an inline span instead of the footer and shrinks to
+   the width of its own text. */
+[data-place="composer"] { display: block; width: 100%; }
+
+/* The composer is a card: the input and the send button live inside one raised
+   surface rather than sitting in a bar welded to the bottom of the window. */
+#composer {
+  max-width: 760px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.06);
+  padding: 10px 10px 8px 14px;
+}
+
+#composer:focus-within { border-color: var(--accent); }
+
+/* The row along the bottom of the card, where the controls live: the model and
+   the provider are switchable here rather than only behind a settings screen. */
+#composer .tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#composer .tools .grow { flex: 1; }
+
+#modelPick {
+  font-size: 12.5px;
+  color: var(--muted);
+  background: none;
+  border: none;
+  padding: 5px 6px;
+  cursor: pointer;
+  max-width: 260px;
+}
+
+#modelPick:hover { color: var(--ink); }
+
+#composer textarea {
+  flex: 1;
+  resize: none;
+  min-height: 34px;
+  max-height: 200px;
+  padding: 4px 0;
+  font-family: var(--sans);
+  font-size: 15.5px;
+  line-height: 1.55;
+  color: var(--ink);
+  background: none;
+  border: none;
+  outline: none;
+}
+
+#composer textarea::placeholder { color: var(--muted); }
+
+/* A round arrow: it is a go button, not a sentence. */
+#send {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--accent-ink);
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+#send:disabled { opacity: 0.45; cursor: default; }
+
+button {
+  padding: 12px 20px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--accent-ink);
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+button:disabled { opacity: 0.5; cursor: default; }
+
+.approval {
+  border: 1px solid var(--accent);
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+}
+
+.approval p {
+  margin: 0 0 10px;
+  font-family: var(--mono);
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.approval .row { display: flex; gap: 8px; }
+
+.approval button {
+  padding: 7px 16px;
+  font-size: 13px;
+}
+
+.approval button.no {
+  background: var(--card);
+  color: var(--ink);
+  border-color: var(--line);
+}
+
+.cmd {
+  font-size: 12.5px;
+  color: var(--muted);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  padding: 2px 0;
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.35);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 40px 16px;
+  overflow-y: auto;
+  z-index: 10;
+}
+
+.overlay[hidden] { display: none; }
+
+.sheet {
+  width: 100%;
+  max-width: 560px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+
+.sheet h2 {
+  margin: 0 0 14px;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+/* One type scale for every section of the panel. A section may vary within
+   itself — a label over a value, a heading over its rows — but each section uses
+   the same variation, so the four read as one panel. */
+.sheet .pane .intro {
+  margin: 4px 0 14px;
+  max-width: 66ch;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.sheet .pane .group-heading {
+  margin: 20px 0 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.sheet .pane .group-heading .count { opacity: 0.6; }
+.sheet .pane .switchrow { padding: 7px 0; }
+
+.sheet .pane .switchname {
+  font-family: var(--mono);
+  font-size: 12.5px;
+}
+
+/* A list row reads the same whatever section it is in: the guard lists, the
+   provider list and the switches all sit on one line of the same size. */
+.sheet .pane > .row,
+.sheet .pane #providerRows .row {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.5;
+  padding: 7px 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* The add form is a row of boxes, not a list row. */
+.sheet .pane > .row input { font-family: var(--sans); font-size: 13px; }
+
+.sheet .pane .switchname .meta {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--sans);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.sheet label {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.sheet input,
+.sheet textarea {
+  display: block;
+  width: 100%;
+  margin-top: 5px;
+  padding: 8px 10px;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  outline: none;
+  resize: vertical;
+}
+
+.sheet input:focus,
+.sheet textarea:focus { border-color: var(--accent); }
+
+.sheet .info {
+  margin: 4px 0 14px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--muted);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.sheet .row { display: flex; gap: 8px; }
+
+.sheet button.no {
+  background: var(--bg);
+  color: var(--ink);
+  border-color: var(--line);
+}
+
+/* The settings panel: sections down the left, controls on the right, and the
+   buttons on their own line underneath. Without the wrap the button row
+   stretches to the height of the panel and comes out as two tall slabs. */
+.sheet.wide {
+  max-width: 860px;
+  display: flex;
+  flex-wrap: wrap;
+  padding: 0;
+  overflow: hidden;
+}
+
+.sheet.wide .row {
+  flex: 0 0 100%;
+  align-items: center;
+  padding: 14px 20px;
+  border-top: 1px solid var(--line);
+}
+
+.sheet .nav {
+  flex: 0 0 186px;
+  border-right: 1px solid var(--line);
+  background: var(--panel);
+  padding: 16px 10px;
+}
+
+.sheet .nav button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  margin-bottom: 2px;
+  font-size: 13.5px;
+  font-weight: 400;
+  color: var(--muted);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.sheet .nav button:hover { background: var(--bg); }
+
+.sheet .nav button.active {
+  background: var(--card);
+  border-color: var(--line);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.sheet .pane {
+  flex: 1;
+  min-width: 0;
+  padding: 20px 22px;
+  max-height: 72vh;
+  overflow-y: auto;
+}
+
+/* One setting per row: what it is on the left, the control on the right.
+   Stacking a label above a box is what a form does; a product puts them
+   side by side and gets out of the way. */
+.sheet .field {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  column-gap: 22px;
+  align-items: start;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line);
+  margin: 0;
+}
+
+.sheet .field > .label {
+  grid-column: 1;
+  font-size: 13.5px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.sheet .field > .why {
+  grid-column: 1;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 3px 0 0;
+}
+
+.sheet .field > *:not(.label):not(.why) { grid-column: 2; }
+
+.sheet select,
+.sheet .field input[type=text] {
+  width: 100%;
+  max-width: 420px;
+  padding: 8px 10px;
+  font-family: var(--sans);
+  font-size: 14px;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  outline: none;
+}
+
+.sheet select:focus,
+.sheet .field input[type=text]:focus { border-color: var(--accent); }
+
+/* Lists you add to and remove from, rather than a box of text to edit. */
+.rows {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  max-width: 420px;
+}
+
+.rows .row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 11px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  border-bottom: 1px solid var(--line);
+}
+
+.rows .row:last-child { border-bottom: none; }
+.rows .row.empty { color: var(--muted); font-family: var(--sans); font-size: 13px; }
+
+.rows .row .x {
+  margin-left: auto;
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 2px;
+}
+
+.rows .row .x:hover { color: var(--danger); }
+
+.addrow { display: flex; gap: 8px; margin-top: 8px; max-width: 420px; }
+
+.addrow input {
+  flex: 1;
+  padding: 7px 10px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  outline: none;
+}
+
+.addrow input:focus { border-color: var(--accent); }
+
+.addrow button {
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.switchrow { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
+
+.switch {
+  flex: 0 0 40px;
+  width: 40px;
+  height: 22px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--line);
+  position: relative;
+  cursor: pointer;
+}
+
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  transition: left 0.12s;
+}
+
+.switch.on { background: var(--accent); border-color: var(--accent); }
+.switch.on::after { left: 20px; }
+
+.note-line { font-size: 12.5px; color: var(--muted); margin-top: 10px; }
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <aside id="side">
+    <div class="side-top">
+      <div class="brand">LOLA</div>
+      <button id="collapseBtn" type="button" title="Fold the sidebar away">‹</button>
+    </div>
+    <button id="newBtn" type="button" class="new"><span class="icon">+</span><span class="label">New session</span></button>
+    <h2>Sessions</h2>
+    <div id="sessions" class="list"><div class="empty">none yet</div></div>
+    <div class="side-foot">
+      <button id="settingsBtn" type="button"><span class="icon">&#9881;</span><span class="label">Settings</span></button>
+    </div>
+  </aside>
+
+  <main class="conversation is-empty">
+    <div id="transcript">
+      <div class="wrap" id="lines">
+        <div class="hero" id="empty">
+          <div class="hi">What are we building?</div>
+          <p>Ask for a task, or just talk.</p>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      <!-- Where a plugin may put voice mode. The ball itself belongs to the voice
+           plugin: markup, styles and behaviour all arrive with it. -->
+      <div data-place="voice-mode"></div>
+
+      <div class="above">
+        <label class="chip" for="wsPick" title="Where the agent may write">
+          <span class="ic"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1.6 4.4h4.1l1.2 1.7h7.5v6.5H1.6z"/></svg></span>
+          <select id="wsPick"></select>
+          <span class="cv"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4.5 6.5 8 10l3.5-3.5"/></svg></span>
+        </label>
+
+        <!-- The mode selector used to live here. It now comes from the modechip
+             plugin, through the contribution seam, and lands in the place
+             further down this row. The page no longer knows what a mode is. -->
+        <button type="button" id="providerPick" class="chip" title="Where model calls go">
+          <span class="ic"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2.6 4.4h10.8v7.2H2.6z"/><path d="M2.6 6.8h10.8"/><path d="M5 9.4h3.2"/></svg></span>
+          <span id="providerName">local</span>
+          <span class="cv" id="providerCv"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4.5 6.5 8 10l3.5-3.5"/></svg></span>
+        </button>
+
+        <!-- Where plugins put their own chips. The page draws whatever it is
+             handed, in the order it was offered. -->
+        <span data-place="above-composer"></span>
+      </div>
+
+      <!-- The composer is a plugin's, not the page's. The page keeps the place
+           and the socket; what sending means belongs to something else. -->
+      <span data-place="composer"></span>
+    </footer>
+  </main>
+
+  <aside id="details" hidden>
+    <div class="details-body"></div>
+  </aside>
+</div>
+
+<div id="settings" class="overlay" hidden>
+  <div class="sheet wide">
+    <div class="nav">
+    </div>
+
+    <div class="pane">
+      
+    </div>
+
+    <div class="row">
+      <button id="setSave" type="button">Save changes</button>
+      <button id="setClose" class="no" type="button">Close</button>
+    </div>
+    <div class="note-line" id="saveNote"></div>
+  </div>
+</div>
+
+
+<script>
+// ---------------------------------------------------------------------
+// The client. Talks to the harness over Server-Sent Events, so a run's
+// steps appear as they happen rather than all at the end.
+// ---------------------------------------------------------------------
+
+const lines = document.getElementById('lines');
+const transcript = document.getElementById('transcript');
+
+// The composer is a plugin's markup now, so the page holds no reference to it.
+// It finds whichever box carries data-composer, and posts to that form's own
+// action — which is all a frontend needs to know about sending.
+
+let busy = false;
+let atBottom = true;
+
+// Keep the view pinned to the newest line, unless you have scrolled up.
+transcript.addEventListener('scroll', () => {
+  atBottom = transcript.scrollTop + transcript.clientHeight >= transcript.scrollHeight - 40;
+});
+
+// Everything is escaped before anything is tagged, so a reply cannot inject
+// markup into the page. Deliberately small: fenced code, inline code, bold,
+// headings and lists.
+function esc(s) {
+  return s.replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
+
+function markdown(text) {
+  const parts = esc(text).split(/```/);
+  let out = '';
+
+  parts.forEach((chunk, i) => {
+    if (i % 2 === 1) {
+      const nl = chunk.indexOf('\n');
+      const code = nl === -1 ? chunk : chunk.slice(nl + 1);
+      out += '<pre><code>' + code.replace(/\n$/, '') + '</code></pre>';
+      return;
+    }
+
+    let body = chunk;
+    body = body.replace(/`([^`]+)`/g, '<code>$1</code>');
+    body = body.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+
+    const cells = (line) => line.replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
+    const isRule = (line) => /^\|[\s:|-]+\|$/.test(line);
+
+    out += body.split(/\n{2,}/).map((block) => {
+      if (!block.trim()) return '';
+
+      // A table: a header row of pipes, a rule row under it, then the body.
+      const rows = block.split('\n').map((l) => l.trim()).filter((l) => l !== '');
+      if (rows.length >= 2 && rows[0].startsWith('|') && isRule(rows[1])) {
+        const head = cells(rows[0]);
+        const rest = rows.slice(2).map(cells);
+        let t = '<table><thead><tr>' + head.map((h) => '<th>' + h + '</th>').join('') + '</tr></thead><tbody>';
+        t += rest.map((r) => '<tr>' + r.map((c) => '<td>' + c + '</td>').join('') + '</tr>').join('');
+        return t + '</tbody></table>';
+      }
+
+      if (/^\s*[-*]\s+/m.test(block)) {
+        const items = block.split('\n').filter((l) => l.trim())
+          .map((l) => '<li>' + l.replace(/^\s*[-*]\s+/, '') + '</li>').join('');
+        return '<ul>' + items + '</ul>';
+      }
+      if (/^#{1,6}\s/.test(block.trim())) {
+        return '<h3>' + block.trim().replace(/^#{1,6}\s+/, '') + '</h3>';
+      }
+      return '<p>' + block.trim().replace(/\n/g, '<br>') + '</p>';
+    }).join('');
+  });
+
+  return out;
+}
+
+function add(cls, text, tool) {
+  const empty = document.getElementById('empty');
+  if (empty) empty.remove();
+
+  const el = document.createElement('div');
+  el.className = cls;
+  if (tool) {
+    el.innerHTML = '';
+    const b = document.createElement('b');
+    b.textContent = '→ ' + tool;
+    el.appendChild(b);
+    el.appendChild(document.createTextNode('  ' + (text || '')));
+  } else if (cls.indexOf('msg') === 0 && cls.indexOf('err') === -1) {
+    el.innerHTML = markdown(text || '');
+  } else {
+    el.textContent = text;
+  }
+  lines.appendChild(el);
+
+  if (atBottom) transcript.scrollTop = transcript.scrollHeight;
+}
+
+// How long ago a session was last touched, so the list reads like a list of
+// recent conversations rather than a set of identifiers.
+function ago(iso) {
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return '';
+  const m = Math.round((Date.now() - t) / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return m + 'm ago';
+  const h = Math.round(m / 60);
+  if (h < 24) return h + 'h ago';
+  return Math.round(h / 24) + 'd ago';
+}
+
+// What the pane shows before anything has been said.
+function emptyState() {
+  const hero = document.createElement('div');
+  hero.className = 'hero';
+  hero.id = 'empty';
+
+  const hi = document.createElement('div');
+  hi.className = 'hi';
+  hi.textContent = 'What are we building?';
+
+  const p = document.createElement('p');
+  p.textContent = 'Ask for a task, or just talk.';
+
+  hero.appendChild(hi);
+  hero.appendChild(p);
+  return hero;
+}
+
+function setBusy(state) {
+  busy = state;
+  sendBtn.disabled = state;
+  sendBtn.textContent = state ? '…' : '↑';
+}
+
+// The live stream.
+const stream = new EventSource('/api/events');
+
+stream.onmessage = (e) => {
+  let ev;
+  try { ev = JSON.parse(e.data); } catch { return; }
+
+  switch (ev.kind) {
+    case 'user':     add('msg you', ev.text); break;
+    case 'say':      add('msg lola', ev.text); break;
+    case 'partial':  appendPartial(ev.text); break;
+    case 'step':     keepPartial(); add('step', '', ev.tool); break;
+    // A plugin somewhere in the tree has said something about its own work.
+    // Drawn the quiet way a step is drawn: it is narration, not the model.
+    case 'note':     add('step', ev.text); break;
+    case 'answer':   finishPartial(ev.text); break;
+    case 'error':    add('msg err', ev.text); break;
+    case 'busy':     setBusy(ev.busy); break;
+    case 'command':  add('cmd', ev.text); break;
+    case 'modes':    loadContributions(); break;
+    case 'providers': loadProviders(); break;
+    case 'state':    loadState(); break;
+    case 'plugins':  loadPanes(); break;
+    case 'sessions': loadSessions(); break;
+    case 'history':  loadHistory(); break;
+    case 'cleared': {
+      const field = document.querySelector('[data-composer] textarea');
+      if (field) { field.value = ''; field.dispatchEvent(new Event('input', { bubbles: true })); }
+      loadHistory();
+      loadSessions();
+      break;
+    }
+    case 'approval': askApproval(ev.id, ev.text); break;
+  }
+};
+
+
+// --- errors, where they can be read ---------------------------------------
+//
+// Anything that goes wrong in this page is written to the voice log, because "it did
+// nothing" cannot be debugged by asking somebody to read a console they never opened.
+window.addEventListener('error', (e) => {
+  fetch('/api/voice/trace', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      pageError: String(e.message),
+      where: (e.filename || '').split('/').pop() + ':' + (e.lineno || 0),
+    }),
+  }).catch(() => {});
+});
+
+window.addEventListener('unhandledrejection', (e) => {
+  const reason = e.reason && e.reason.message ? e.reason.message : String(e.reason);
+  fetch('/api/voice/trace', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rejected: reason }),
+  }).catch(() => {});
+});
+
+// --- sessions and commands ------------------------------------------------
+
+const sessionsBox = document.getElementById('sessions');
+
+async function loadSessions() {
+  try {
+    const rows = await (await fetch('/api/sessions')).json();
+    sessionsBox.innerHTML = '';
+    if (!rows.length) {
+      const e = document.createElement('div');
+      e.className = 'empty';
+      e.textContent = 'none yet';
+      sessionsBox.appendChild(e);
+      return;
+    }
+    for (const s of rows) {
+      const row = document.createElement('div');
+      row.className = 'session';
+
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'session-open';
+      b.textContent = s.title || s.id;
+
+      const meta = document.createElement('span');
+      meta.className = 'meta';
+      meta.textContent = ago(s.updated) + ' · ' + s.count + ' messages';
+      b.appendChild(meta);
+      b.addEventListener('click', () => resumeSession(s.id));
+
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'session-del';
+      del.title = 'Delete this session';
+      del.textContent = '×';
+      del.addEventListener('click', () => {
+        fetch('/api/command', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ line: '/delete ' + s.id }),
+        });
+      });
+
+      row.appendChild(b);
+      row.appendChild(del);
+      sessionsBox.appendChild(row);
+    }
+  } catch {
+    // If nothing is offering the list any more, say so rather than leaving a
+    // stale one on screen: a plugin switched off in the tree should look
+    // switched off, not frozen.
+    sessionsBox.innerHTML = '';
+    const none = document.createElement('div');
+    none.className = 'empty';
+    none.textContent = 'none yet';
+    sessionsBox.appendChild(none);
+  }
+}
+
+async function resumeSession(id) {
+  // Switching sessions starts fresh: half-typed text belongs to the session
+  // you left, not the one you arrived in.
+  //
+  // The box is drawn by the composer plugin now, not by this page, so it is
+  // asked for by its place rather than held in a variable. Reaching for a
+  // variable that no longer exists threw here and stopped the switch before it
+  // was ever sent.
+  const field = document.querySelector('[data-composer] textarea');
+  if (field) {
+    field.value = '';
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  const res = await fetch('/api/command', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ line: '/resume ' + id }),
+  });
+  if (!res.ok) { add('msg err', await res.text()); return; }
+
+  // Redraw here rather than waiting to be told. The harness does broadcast the
+  // switch, but a page that only ever redraws when it hears an event sits on
+  // the old conversation for as long as the event is missed — with no error to
+  // show for it.
+  await loadHistory();
+  loadSessions();
+}
+
+// Redraw the conversation from the harness's own history, which is what makes
+// a resumed session show up rather than an empty transcript.
+async function loadHistory() {
+  try {
+    const msgs = await (await fetch('/api/history')).json();
+    lines.innerHTML = '';
+    if (!msgs.length) {
+      lines.appendChild(emptyState());
+      return;
+    }
+    for (const m of msgs) {
+      if (m.role === 'user') {
+        add('msg you', m.text);
+      } else if (m.role === 'assistant') {
+        // What it said is a message; the call it made is a line under it.
+        if (m.text) add('msg lola', m.text);
+        if (m.tool) add('step', '', m.tool);
+      }
+    }
+  } catch { /* leave it */ }
+}
+
+stream.onerror = () => { /* EventSource reconnects on its own */ };
+
+// A gated tool call is waiting on an answer. Sending one lets it continue;
+// sending nothing leaves the harness refusing, which is the safe direction.
+function askApproval(id, prompt) {
+  const empty = document.getElementById('empty');
+  if (empty) empty.remove();
+
+  const card = document.createElement('div');
+  card.className = 'approval';
+
+  const p = document.createElement('p');
+  p.textContent = prompt;
+  card.appendChild(p);
+
+  const row = document.createElement('div');
+  row.className = 'row';
+
+  const yes = document.createElement('button');
+  yes.textContent = 'Yes, do it';
+
+  const no = document.createElement('button');
+  no.className = 'no';
+  no.textContent = 'No';
+
+  const answer = async (allow) => {
+    yes.disabled = true;
+    no.disabled = true;
+    try {
+      await fetch('/api/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, allow }),
+      });
+    } catch { /* the guard refuses on its own if this never lands */ }
+  };
+
+  yes.addEventListener('click', () => answer(true));
+  no.addEventListener('click', () => answer(false));
+
+  row.appendChild(yes);
+  row.appendChild(no);
+  card.appendChild(row);
+
+  lines.appendChild(card);
+  if (atBottom) transcript.scrollTop = transcript.scrollHeight;
+}
+
+// --- settings --------------------------------------------------------------
+
+const sheet = document.getElementById('settings');
+const saveNote = document.getElementById('saveNote');
+
+let workspaceDraft = [];
+let guardDraft = { protected: [], gated: [], dangerous: [] };
+let modelList = [];
+
+// The models the provider offers, so one is chosen from a list rather than
+// typed from memory.
+async function loadModelList() {
+  try {
+    modelList = await (await fetch('/api/models')).json();
+  } catch {
+    modelList = [];
+  }
+}
+
+function fillModels(current) {
+  const sel = document.getElementById('setModel');
+  sel.innerHTML = '';
+  const list = modelList.length ? modelList : (current ? [current] : []);
+  for (const m of list) {
+    const o = document.createElement('option');
+    o.value = m;
+    o.textContent = m;
+    sel.appendChild(o);
+  }
+  if (current) sel.value = current;
+}
+
+// A list of removable rows, rather than a box of text to edit by hand.
+function drawRows(id, items, onRemove) {
+  const box = document.getElementById(id);
+  if (!box) return;   // a section may own this list, and may not be mounted
+  box.innerHTML = '';
+  if (!items.length) {
+    const r = document.createElement('div');
+    r.className = 'row empty';
+    r.textContent = 'nothing set';
+    box.appendChild(r);
+    return;
+  }
+  items.forEach((item, i) => {
+    const r = document.createElement('div');
+    r.className = 'row';
+
+    const t = document.createElement('span');
+    t.textContent = item;
+
+    const x = document.createElement('button');
+    x.type = 'button';
+    x.className = 'x';
+    x.textContent = '×';
+    x.title = 'Remove';
+    x.addEventListener('click', () => onRemove(i));
+
+    r.appendChild(t);
+    r.appendChild(x);
+    box.appendChild(r);
+  });
+}
+
+function redrawRows() {
+  drawRows('wsRows', workspaceDraft, (i) => { workspaceDraft.splice(i, 1); redrawRows(); });
+  drawRows('protectedRows', guardDraft.protected, (i) => { guardDraft.protected.splice(i, 1); redrawRows(); });
+  drawRows('gatedRows', guardDraft.gated, (i) => { guardDraft.gated.splice(i, 1); redrawRows(); });
+  drawRows('dangerousRows', guardDraft.dangerous, (i) => { guardDraft.dangerous.splice(i, 1); redrawRows(); });
+}
+
+function adder(inputId, btnId, apply) {
+  const go = () => {
+    const el = document.getElementById(inputId);
+    if (!el) return;
+    const v = el.value.trim();
+    if (!v) return;
+    apply(v);
+    el.value = '';
+    redrawRows();
+  };
+
+  const btn = document.getElementById(btnId);
+  const box = document.getElementById(inputId);
+  if (!btn || !box) return;   // not on the page (yet): a section may bring it
+  if (btn.dataset.wired === 'yes') return;
+
+  btn.dataset.wired = 'yes';
+  btn.addEventListener('click', go);
+  box.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); go(); }
+  });
+}
+
+// Sections are injected after load, so their Add buttons are wired when they
+// arrive rather than once at startup.
+function wireAdders() {
+  adder('wsAdd', 'wsAddBtn', (v) => workspaceDraft.push(v));
+  adder('protectedAdd', 'protectedAddBtn', (v) => guardDraft.protected.push(v));
+  adder('gatedAdd', 'gatedAddBtn', (v) => guardDraft.gated.push(v));
+  adder('dangerousAdd', 'dangerousAddBtn', (v) => guardDraft.dangerous.push(v));
+}
+
+wireAdders();
+
+function selectPane(which) {
+  for (const b of sheet.querySelectorAll('.nav button')) {
+    b.classList.toggle('active', b.dataset.pane === which);
+  }
+  for (const pane of sheet.querySelectorAll("[id^='pane-']")) {
+    pane.hidden = pane.id !== 'pane-' + which;
+  }
+}
+
+let firstSectionKey = null;
+
+// --- sections offered by plugins -------------------------------------------
+//
+// A section says which settings it edits; the panel draws them with the same
+// markup as its own fields, so a section from a plugin looks like the panel it
+// appears in. Markup from a plugin looked like a different program.
+
+function slugOf(title) {
+  return 's-' + title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+}
+
+async function drawSections() {
+  let panes = [];
+  try {
+    panes = await (await fetch('/api/panes')).json();
+  } catch {
+    return;
+  }
+
+  const nav = sheet.querySelector('.nav');
+  const holder = sheet.querySelector('.pane');
+  const mine = (panes || [])
+    .filter((p) => p.slot === 'settings' && (p.body || p.source || (p.fields || []).length))
+    .sort((a, b) => (a.order || 0) - (b.order || 0));
+
+  // Anything offered earlier and not offered now goes, tab and panel: a section
+  // switched off must leave nothing behind.
+  const keep = new Set(mine.map((p) => slugOf(p.title)));
+  for (const b of Array.from(nav.querySelectorAll('[data-pane^="s-"]'))) {
+    if (!keep.has(b.dataset.pane)) b.remove();
+  }
+  for (const s of Array.from(holder.querySelectorAll("[id^='pane-s-']"))) {
+    if (!keep.has(s.id.replace('pane-', ''))) s.remove();
+  }
+
+  for (const pane of mine) {
+    const key = slugOf(pane.title);
+
+    if (!nav.querySelector('[data-pane="' + key + '"]')) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.dataset.pane = key;
+      b.textContent = pane.title;
+      b.addEventListener('click', () => selectPane(key));
+      nav.appendChild(b);
+    }
+
+    let section = document.getElementById('pane-' + key);
+    if (!section) {
+      section = document.createElement('div');
+      section.id = 'pane-' + key;
+      section.hidden = true;
+      holder.appendChild(section);
+    }
+
+    // A section that renders itself is redrawn every time: its content changes
+    // as things are switched.
+    if (pane.source || section.dataset.drawn !== pane.title + (pane.body || '').length) {
+      await renderSection(section, pane);
+      section.dataset.drawn = pane.title + (pane.body || '').length;
+    }
+    if (!firstSectionKey) firstSectionKey = key;
+  }
+
+  // Sections sit first, in the order they were offered — inserting each at the
+  // front reversed them.
+  // Inserting at the front reverses, so walk the list backwards to end up in
+  // the order the panes asked for.
+  const inOrder = mine.map((p) => nav.querySelector('[data-pane="' + slugOf(p.title) + '"]')).filter(Boolean);
+  for (const b of inOrder.slice().reverse()) nav.insertBefore(b, nav.firstElementChild);
+}
+
+// renderSection puts a section's markup into its pane. The markup is the panel's
+// own, so it carries the ids the save button and the workspace rows already work
+// on: the behaviour comes with it rather than being rebuilt here.
+async function renderSection(section, pane) {
+  if (pane.source) {
+    try {
+      section.innerHTML = await (await fetch(pane.source)).text();
+    } catch {
+      section.innerHTML = '<div class="why">this section could not be drawn</div>';
+    }
+  } else {
+    section.innerHTML = pane.body || '';
+    // A section may name a script; markup alone is inert.
+    for (const old of section.querySelectorAll('script')) old.remove();
+    for (const src of (pane.body || '').match(/src="([^"]+)"/g) || []) {
+      const url = src.slice(5, -1);
+      if (document.querySelector('script[data-from="' + url + '"]')) continue;
+      const el = document.createElement('script');
+      el.src = url;
+      el.dataset.from = url;
+      document.body.appendChild(el);
+    }
+    wireAdders();
+    redrawRows();
+    wireProviderAdd();
+    drawProviders();
+    wirePersona(section);
+  }
+}
+
+// A section may carry a box that needs talking to. The persona is the first: it is
+// text somebody writes, saved to a file, so the page loads it into the box and sends
+// it back. Guarded, because a harness without that section still has a settings panel.
+async function wirePersona(section) {
+  const box = section.querySelector('#personaText');
+  const save = section.querySelector('#personaSave');
+  if (!box || !save) return;
+
+  try {
+    const data = await (await fetch('/api/persona')).json();
+    box.value = data.text || '';
+    const where = section.querySelector('#personaWhere');
+    if (where && data.path) where.textContent = data.path.replace(/^.*\/Users\/[^/]+/, '~');
+  } catch {
+    const note = section.querySelector('#personaNote');
+    if (note) note.textContent = 'could not load the persona';
+  }
+
+  save.style.display = 'none';          // the panel has one Save, and this is not it
+
+  document.addEventListener('lola:save', async () => {
+    const note = section.querySelector('#personaNote');
+    save.disabled = true;
+    try {
+      const res = await fetch('/api/persona', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: box.value }),
+      });
+      if (note) note.textContent = res.ok ? 'saved — next reply uses it' : 'could not save';
+    } catch {
+      if (note) note.textContent = 'could not save';
+    }
+    save.disabled = false;
+  });
+}
+
+// A switch inside a section asks the plugin that drew it to change the tree, then
+// the section redraws itself: the page relays, it does not decide.
+document.addEventListener('click', async (e) => {
+  const sw = e.target.closest && e.target.closest('[data-switch]');
+  if (!sw) return;
+
+  sw.disabled = true;
+  await fetch('/api/tree/set', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: sw.dataset.switch, on: sw.dataset.on !== '1' }),
+  });
+  await drawSections();
+});
+
+async function openSettings(which) {
+  // The panel opens even when nothing is offering settings. A panel that holds
+  // the switches must never be shut out by one of the things it can switch off:
+  // turning settings off used to lock the drawer that turns it back on.
+  let s = null;
+  try {
+    s = await (await fetch('/api/settings')).json();
+  } catch {
+    s = null;
+  }
+
+  await drawSections();
+
+  if (s) {
+    try {
+    const hasModel = !!document.getElementById('setModel');
+    if (hasModel) {
+      await loadModelList();
+      fillModels(s.model);
+    }
+
+    const source = document.getElementById('setSource');
+    if (source) source.value = s.source || '';
+
+    workspaceDraft = (s.workspace || []).slice();
+    guardDraft = {
+      protected: (s.protected || []).slice(),
+      gated: (s.gated || []).slice(),
+      dangerous: (s.dangerous || []).slice(),
+    };
+    redrawRows();
+    } catch (e) {
+      // A control owned by a section that is not mounted. The panel still opens.
+      console.warn('settings: some controls are not on the page', e);
+    }
+  } else {
+    // Say it plainly where the fields live, rather than showing stale values.
+    const source = document.getElementById('setSource');
+    if (source) {
+      source.value = '';
+      source.placeholder = 'settings are not available — nothing is offering them';
+    }
+  }
+
+  saveNote.textContent = '';
+  sheet.hidden = false;
+  // Whatever is actually there: a section may be switched off.
+  const fallback = (sheet.querySelector('#settings .nav button') || {}).dataset;
+  selectPane(which || firstSectionKey || (fallback && fallback.pane) || 'plugins');
+}
+
+async function saveSettings() {
+  const res = await fetch('/api/settings/set', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: document.getElementById('setModel').value.trim(),
+      workspace: workspaceDraft,
+      source: document.getElementById('setSource').value.trim(),
+      protected: guardDraft.protected,
+      gated: guardDraft.gated,
+      dangerous: guardDraft.dangerous,
+    }),
+  });
+
+  // Sections save their own things: the page says so, rather than knowing which
+  // endpoints exist. One button, everything on the sheet.
+  document.dispatchEvent(new CustomEvent('lola:save'));
+
+  saveNote.textContent = res.ok ? 'Saved.' : await res.text();
+  if (res.ok) loadState();
+}
+
+document.getElementById('newBtn').addEventListener('click', async () => {
+  // The box belongs to the composer plugin now, so it is found by its place.
+  // Reaching for a variable that no longer exists threw here, which is why the
+  // button did nothing and the list only caught up on a reload.
+  const field = document.querySelector('[data-composer] textarea');
+  if (field) {
+    field.value = '';
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  await fetch('/api/command', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ line: '/new' }),
+  });
+
+  await loadHistory();
+  await loadSessions();
+  if (field) field.focus();
+});
+document.getElementById('settingsBtn').addEventListener('click', () => openSettings());
+document.getElementById('setSave').addEventListener('click', saveSettings);
+document.getElementById('setClose').addEventListener('click', () => { sheet.hidden = true; });
+
+for (const b of sheet.querySelectorAll('.nav button')) {
+  b.addEventListener('click', () => selectPane(b.dataset.pane));
+}
+
+// Folding the sidebar. It narrows to a rail rather than disappearing, so the
+// things you reach for stay where they were.
+const frame = document.querySelector('.shell');
+const collapseBtn = document.getElementById('collapseBtn');
+
+function setCollapsed(on) {
+  frame.classList.toggle('collapsed', on);
+  collapseBtn.textContent = on ? '›' : '‹';
+  collapseBtn.title = on ? 'Show the sidebar' : 'Fold the sidebar away';
+}
+
+collapseBtn.addEventListener('click', () => {
+  setCollapsed(!frame.classList.contains('collapsed'));
+});
+
+// The model, switchable from the composer so it is where you already are
+// rather than behind a settings screen.
+async function loadModelPicker() {
+  const sel = document.getElementById('modelPick');
+  if (!sel) return;
+
+  let list = [];
+  try {
+    list = await (await fetch('/api/models')).json();
+  } catch {
+    list = [];
+  }
+
+  let current = '';
+  try {
+    current = (await (await fetch('/api/state')).json()).model || '';
+  } catch {
+    current = '';
+  }
+
+  sel.innerHTML = '';
+  const options = list.length ? list : (current ? [current] : []);
+  for (const m of options) {
+    const o = document.createElement('option');
+    o.value = m;
+    o.textContent = m;
+    sel.appendChild(o);
+  }
+  if (current) sel.value = current;
+
+  sel.addEventListener('change', async () => {
+    await fetch('/api/settings/set', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: sel.value }),
+    });
+    loadState();
+  });
+}
+
+// The endpoints the harness can use, and the ones added from here. Adding and
+// removing are saved at once, to the harness home rather than the config in the
+// repo, so a mistake stays a mistake instead of becoming a commit.
+async function drawProviders() {
+  const box = document.getElementById('providerRows');
+  if (!box) return;
+
+  let list = [];
+  try {
+    list = await (await fetch('/api/providers')).json();
+  } catch {
+    list = [];
+  }
+
+  box.innerHTML = '';
+  if (!list.length) {
+    const r = document.createElement('div');
+    r.className = 'row empty';
+    r.textContent = 'nothing set';
+    box.appendChild(r);
+    return;
+  }
+
+  for (const p of list) {
+    const r = document.createElement('div');
+    r.className = 'row';
+
+    const t = document.createElement('span');
+    t.textContent = p.name + '  ·  ' + p.url
+      + (p.keyFrom ? '  ·  key: ' + p.keyFrom : '')
+      + (p.current ? '  ·  in use' : '');
+
+    const x = document.createElement('button');
+    x.type = 'button';
+    x.className = 'x';
+    x.textContent = '×';
+    x.title = 'Remove';
+    x.addEventListener('click', async () => {
+      const res = await fetch('/api/providers/remove', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: p.name }),
+      });
+      if (!res.ok) document.getElementById('provNote').textContent = await res.text();
+
+      drawProviders();
+      loadProviders();
+    });
+
+    r.appendChild(t);
+    r.appendChild(x);
+    box.appendChild(r);
+  }
+}
+
+// Add one: name, url, and — only if the endpoint needs one — the name of the
+// environment variable its key lives in. It asks for the variable's name on
+// purpose. A key typed in here would be a key written down.
+function wireProviderAdd() {
+  const go = async () => {
+    const name = document.getElementById('provAddName').value.trim();
+    const url = document.getElementById('provAddUrl').value.trim();
+    const key = document.getElementById('provAddKey').value.trim();
+    const note = document.getElementById('provNote');
+
+    if (!name || !url) {
+      note.textContent = 'A name and a url, at least.';
+      return;
+    }
+
+    const res = await fetch('/api/providers/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, url, key }),
+    });
+    if (!res.ok) {
+      note.textContent = await res.text();
+      return;
+    }
+
+    note.textContent = 'Added ' + name + ', saved in your harness home.';
+    for (const id of ['provAddName', 'provAddUrl', 'provAddKey']) {
+      document.getElementById(id).value = '';
+    }
+
+    drawProviders();
+    loadProviders();
+  };
+
+  const btn = document.getElementById('provAddBtn');
+  if (!btn || btn.dataset.wired === 'yes') return;
+  btn.dataset.wired = 'yes';
+  btn.addEventListener('click', go);
+}
+
+// What plugins have offered the page. A contribution says where it wants to
+// live and what it is, and the page decides how each kind is drawn: a chip is a
+// chip, a toggle is a switch, a selector is a dropdown. A kind the page does not
+// know is left out rather than guessed at, and a place it does not know is
+// simply not drawn anywhere.
+async function loadContributions() {
+  let list = [];
+  try {
+    list = await (await fetch('/api/contributions')).json();
+  } catch {
+    list = [];
+  }
+
+  fillPlaces(document, list, 0);
+
+  // The model picker arrives with the composer now, so it is filled after the
+  // drawing rather than at startup, when there was no box to fill it in.
+  await loadModelPicker();
+}
+
+// Fill every place it can find — including places that arrive inside markup a
+// plugin has just drawn. Without this, a fragment containing a slot of its own
+// would be an empty gap: the page only filled places it knew about when it
+// started.
+//
+// Three levels is the limit worth having. A fragment nesting deeper than that
+// is a page pretending to be a contribution.
+function fillPlaces(root, list, depth) {
+  if (depth > 2) return;
+
+  for (const host of root.querySelectorAll('[data-place]')) {
+    // Clear only what was drawn from contributions, so the page's own controls
+    // in the same place are left alone.
+    for (const old of host.querySelectorAll('[data-contribution]')) old.remove();
+
+    let added = false;
+    for (const c of list) {
+      if (c.place !== host.dataset.place) continue;
+      const el = drawContribution(c);
+      if (!el) continue;
+      // A contribution can carry a line of help. The page shows it on hover,
+      // because the label has no room to explain itself.
+      if (c.note) el.title = c.note;
+      host.appendChild(el);
+      // It is in the document now, so any script it named can find it.
+      if (c.kind === 'fragment') document.dispatchEvent(new CustomEvent('lola:fragment'));
+      added = true;
+    }
+
+    if (added && host.querySelector('[data-place]')) {
+      fillPlaces(host, list, depth + 1);
+    }
+  }
+}
+
+// One contribution, drawn as the kind it says it is.
+function drawContribution(c) {
+  // A fragment is markup from a plugin, drawn where it asked to be. Plugins are
+  // compiled into the harness, so this is the harness's own code rather than a
+  // stranger's — which is the only reason markup is allowed through here at
+  // all, and why a frontend with nowhere to put markup may simply not draw it.
+  if (c.kind === 'fragment') {
+    const span = document.createElement('span');
+    span.dataset.contribution = c.name;
+    span.innerHTML = c.value || '';
+    // A fragment cannot bring working script with it: markup inserted this way is
+    // inert. Scripts it names are loaded once, here, and only ever from this harness.
+    for (const old of span.querySelectorAll('script')) old.remove();
+    for (const src of (c.value || '').match(/src="([^"]+)"/g) || []) {
+      const url = src.slice(5, -1);
+      if (document.querySelector('script[data-from="' + url + '"]')) continue;
+      const el = document.createElement('script');
+      el.src = url;
+      el.dataset.from = url;
+      document.body.appendChild(el);
+    }
+    return span;
+  }
+
+  if (c.kind === 'chip') {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'chip';
+    b.dataset.contribution = c.name;
+    b.textContent = c.value ? c.label + ' ' + c.value : c.label;
+    // Voice is not a setting that posts a change: it opens the orb, which is a
+    // place to talk rather than a value to store.
+    if (c.name === 'voice') {
+      b.addEventListener('click', () => toggleVoice());
+      return b;
+    }
+    if (c.changeable) {
+      b.addEventListener('click', () => changeContribution(c, b.dataset.value || ''));
+    }
+    return b;
+  }
+
+  if (c.kind === 'text') {
+    const s = document.createElement('span');
+    s.className = 'chip';
+    s.dataset.contribution = c.name;
+    s.textContent = c.value ? c.label + ' ' + c.value : c.label;
+    return s;
+  }
+
+  if (c.kind === 'toggle') {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'chip';
+    b.dataset.contribution = c.name;
+    b.dataset.value = c.value === 'on' ? 'off' : 'on';
+    b.textContent = c.label + (c.value === 'on' ? ' on' : ' off');
+    if (c.changeable) b.addEventListener('click', () => changeContribution(c, b.dataset.value));
+    return b;
+  }
+
+  if (c.kind === 'select') {
+    const s = document.createElement('select');
+    s.className = 'chip';
+    s.dataset.contribution = c.name;
+    for (const option of c.options || []) {
+      const o = document.createElement('option');
+      o.value = option;
+      o.textContent = option;
+      if (option === c.value) o.selected = true;
+      s.appendChild(o);
+    }
+    if (c.changeable) {
+      s.addEventListener('change', () => changeContribution(c, s.value));
+    } else {
+      // A selector that cannot be changed still says what the value is; it just
+      // cannot be moved, so it is not offered as though it could be.
+      s.disabled = true;
+    }
+    return s;
+  }
+
+  // A kind this page cannot draw. Left out on purpose rather than invented.
+  return null;
+}
+
+// Tell the plugin that offered it, through the harness. The reply is the
+// plugin's business; the page just asks for the list again so it shows what
+// actually happened rather than what was asked for.
+async function changeContribution(c, value) {
+  try {
+    const res = await fetch('/api/contribution/set', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: c.name, value: value }),
+    });
+    if (!res.ok) add('msg err', await res.text());
+  } catch (e) {
+    add('msg err', 'could not reach the harness to change ' + c.name);
+  }
+  loadContributions();
+}
+
+// Where model calls go. Switching takes effect on the next call rather than the
+// next restart, so a small local model can be swapped for a sharp one for the
+// job in hand. It shows the endpoint's name and where its key comes from —
+// never the key itself, which never leaves the server.
+async function loadProviders() {
+  const chip = document.getElementById('providerPick');
+  const label = document.getElementById('providerName');
+  const chevron = document.getElementById('providerCv');
+  if (!chip || !label) return;
+
+  let list = [];
+  try {
+    list = await (await fetch('/api/providers')).json();
+  } catch {
+    list = [];
+  }
+
+  if (!list || !list.length) {
+    chip.hidden = true;
+    return;
+  }
+  chip.hidden = false;
+
+  const current = list.find((p) => p.current) || list[0];
+  label.textContent = current.name;
+  chip.title = current.url + (current.keyFrom ? ' — key from ' + current.keyFrom : '');
+
+  // With one endpoint there is nothing to switch to, so it reads as a label
+  // rather than pretending to be a menu.
+  const one = list.length < 2;
+  if (chevron) chevron.hidden = one;
+  chip.onclick = one
+    ? null
+    : async () => {
+        const at = list.findIndex((p) => p.name === current.name);
+        const next = list[(at + 1) % list.length];
+
+        const res = await fetch('/api/providers/set', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: next.name }),
+        });
+        if (!res.ok) add('msg err', await res.text());
+
+        loadProviders();
+        // A different endpoint has a different model list.
+        loadModelPicker();
+      };
+}
+
+// Whether the pane is empty is decided from the transcript itself rather than
+// from every place that might add a message or clear one.
+function syncEmpty() {
+  const main = document.querySelector('main.conversation');
+  const lines = document.getElementById('lines');
+  if (!main || !lines) return;
+
+  const said = lines.querySelector('.msg, .step, .cmd, .err');
+  main.classList.toggle('is-empty', !said);
+
+  const hero = document.getElementById('empty');
+  if (!said && !hero) lines.appendChild(emptyState());
+  if (said && hero) hero.remove();
+}
+
+new MutationObserver(syncEmpty).observe(document.getElementById('lines'), {
+  childList: true,
+  subtree: true,
+});
+syncEmpty();
+
+// Where the agent may write, in the composer rather than behind a settings
+// screen. Who has to approve it first is offered by the guardchip plugin, which
+// is why there is no mode list here.
+async function loadComposer() {
+  const ws = document.getElementById('wsPick');
+  if (!ws) return;
+
+  let s = {};
+  try {
+    s = await (await fetch('/api/settings')).json();
+  } catch {
+    s = {};
+  }
+
+  const dirs = s.workspace || s.Workspace || [];
+  ws.innerHTML = '';
+  for (const d of (dirs.length ? dirs : ['(none set)'])) {
+    const o = document.createElement('option');
+    o.value = d;
+    o.textContent = d;
+    ws.appendChild(o);
+  }
+  ws.disabled = dirs.length === 0;
+
+  ws.onchange = async () => {
+    await fetch('/api/settings/set', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workspace: [ws.value] }),
+    });
+    loadState();
+  };
+}
+
+// A change saved in the settings screen should show in the composer too.
+document.getElementById('setSave').addEventListener('click', () => setTimeout(loadComposer, 300));
+
+// The panels plugins have offered. The frame does not know in advance what
+// will arrive: it asks what has been contributed, and puts each one in the
+// place it asked to go. With nothing offered, the place stays closed.
+async function loadPanes() {
+  let list;
+  try {
+    list = await (await fetch('/api/panes')).json();
+  } catch {
+    return;
+  }
+
+  const details = document.getElementById('details');
+  const body = document.querySelector('#details .details-body');
+  const here = (list || []).filter((p) => p.slot === 'details');
+
+  body.innerHTML = '';
+
+  if (!here.length) {
+    details.hidden = true;
+    return;
+  }
+
+  for (const pane of here) {
+    if (pane.title) {
+      const t = document.createElement('div');
+      t.className = 'pane-title';
+      t.textContent = pane.title;
+      body.appendChild(t);
+    }
+
+    for (const row of (pane.rows || [])) {
+      const r = document.createElement('div');
+      r.className = 'pane-row';
+
+      const l = document.createElement('span');
+      l.className = 'pane-label';
+      l.textContent = row.label;
+
+      const v = document.createElement('span');
+      v.className = 'pane-value';
+      v.textContent = row.value;
+
+      r.appendChild(l);
+      r.appendChild(v);
+      body.appendChild(r);
+    }
+  }
+
+  details.hidden = false;
+}
+
+// The status bar.
+async function loadState() {
+  try {
+    const s = await (await fetch('/api/state')).json();
+    setBusy(!!s.busy);
+  } catch { /* the stream will tell us when it is back */ }
+}
+loadState();
+loadSessions();
+loadPanes();
+loadModelPicker();
+loadComposer();
+loadProviders();
+loadContributions();
+
+// Sending.
+// Sending. The page does not own the box any more: it listens for any form that
+// says it is a composer, and posts to that form's own action.
+document.addEventListener('submit', async (e) => {
+  const box = e.target.closest('[data-composer]');
+  if (!box) return;
+  e.preventDefault();
+
+  const field = box.querySelector('textarea');
+  const text = (field?.value || '').trim();
+  if (!text) return;
+
+  // Anything still being spoken belongs to a reply this message is replacing.
+  if (typeof window.lolaCutIn === 'function') window.lolaCutIn();
+  if (busy) {
+    // Silently swallowing it looks like a broken button. Say what is happening.
+    add('msg err', 'Still working on the last one — answer the approval, or wait for it to finish.');
+    return;
+  }
+
+  field.value = '';
+  field.style.height = 'auto';
+
+  // A line starting with a slash is a command, not a task.
+  const res = text.startsWith('/')
+    ? await fetch('/api/command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ line: text }),
+      })
+    : await fetch(box.action, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+
+  if (!res.ok) {
+    add('msg err', await res.text());
+  }
+});
+
+// Enter sends, Shift+Enter makes a new line.
+document.addEventListener('keydown', (e) => {
+  const field = e.target.closest && e.target.closest('[data-composer] textarea');
+  if (!field) return;
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    field.form.requestSubmit();
+  }
+});
+
+// A reply being written is one bubble that grows. Without this the text would
+// arrive as a new line per fragment.
+let liveBubble = null;
+
+function appendPartial(text) {
+  if (!text) return;
+  if (!liveBubble) {
+    liveBubble = document.createElement('div');
+    liveBubble.className = 'msg lola';
+    lines.appendChild(liveBubble);
+  }
+  liveBubble.textContent += text;
+  followTheReply();
+  collectForSpeech(text);
+}
+
+// The answer that arrives after the text was already drawn is the same text.
+// Redrawing it would replace what the person just watched being written with a
+// block, so the bubble is kept when it already says the right thing.
+function finishPartial(text) {
+  flushSpeech();
+  if (liveBubble) {
+    const already = liveBubble.textContent.trim() === (text || '').trim();
+    if (already) {
+      // The bubble already says it. Keep it, and stop tracking it.
+      liveBubble = null;
+      return;
+    }
+    closePartial();
+  }
+  add('msg lola', text);
+}
+
+// Speaking, for the test: every reply is read out as it arrives.
+//
+// A sentence is finished when it stops being written, so the cut happens on the
+// full stop rather than at the end of the answer — the first sentence starts
+// playing while the second is still being generated. A run-on with no punctuation
+// is cut at a word boundary rather than waiting for a full stop that may never come.
+let speechBuffer = '';
+const speechQueue = [];
+let speaking = false;
+
+const SPEECH_CUT = 120;
+
+function collectForSpeech(text) {
+  // If voice mode is on it owns speaking: it splits, queues, plays, and knows where it was
+  // cut off. The page hands over the words and nothing else.
+  if (typeof window.lolaSay === 'function' && window.lolaSpeakingOwned !== false) {
+    if (window.lolaSay(text)) return;
+  }
+  speechBuffer += text;
+  let cut;
+  while ((cut = sentenceEnd(speechBuffer)) > 0) {
+    const sentence = speechBuffer.slice(0, cut).trim();
+    speechBuffer = speechBuffer.slice(cut);
+    if (sentence) enqueueSpeech(sentence);
+  }
+  if (speechBuffer.length > SPEECH_CUT) {
+    const space = speechBuffer.lastIndexOf(' ', SPEECH_CUT);
+    const at = space > 20 ? space : SPEECH_CUT;
+    const sentence = speechBuffer.slice(0, at).trim();
+    speechBuffer = speechBuffer.slice(at);
+    if (sentence) enqueueSpeech(sentence);
+  }
+}
+
+// sentenceEnd finds where the first finished sentence ends, or -1. A dot between
+// digits or inside a short abbreviation is not an ending.
+function sentenceEnd(s) {
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c !== '.' && c !== '!' && c !== '?') continue;
+    const next = s[i + 1];
+    if (next && next !== ' ' && next !== '\n') continue;   // 3.5, e.g.
+    if (c === '.' && i > 0 && /[0-9]/.test(s[i - 1])) continue;
+    return i + 1;
+  }
+  return -1;
+}
+
+// Whatever has been written but not yet said is said when the reply ends.
+function flushSpeech() {
+  if (typeof window.lolaSayEnd === 'function' && window.lolaSay('')) { window.lolaSayEnd(); return; }
+  const rest = speechBuffer.trim();
+  speechBuffer = '';
+  if (rest) enqueueSpeech(rest);
+}
+
+function enqueueSpeech(text) {
+  speechQueue.push(text);
+  if (!speaking) playNextSpeech();
+}
+
+// What is being said, reported as it is said. Nothing reads it yet; it is the mark
+// that interrupting will need, and it costs one small request per sentence.
+let spokenIndex = 0;
+let currentSpoken = '';     // the sentence being said, so an interruption can name it
+let playingAudio = null;
+
+function markSpoken(sentence) {
+  spokenIndex += 1;
+  fetch('/api/voice/spoken', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ speaking: true, sentence: sentence, index: spokenIndex })
+  }).catch(() => {});
+}
+
+function markSpeechDone() {
+  spokenIndex = 0;
+  fetch('/api/voice/spoken', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ speaking: false })
+  }).catch(() => {});
+}
+
+// Someone started talking while the harness was talking: finish nothing, stop, and say
+// where it got to. The page is the only thing that can stop audio it owns, so this is
+// the seam a frontend has to offer.
+window.lolaInterrupt = function () {
+  if (!speaking) return false;
+  if (playingAudio) {
+    try { playingAudio.pause(); URL.revokeObjectURL(playingAudio.src); } catch (e) {}
+    playingAudio = null;
+  }
+  speechQueue.length = 0;
+  speaking = false;
+  window.lolaSpeaking = false;
+  const sentence = currentSpoken;
+  const index = spokenIndex;
+  markSpeechDone();
+  fetch('/api/voice/interrupt', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sentence: sentence, index: index, at: new Date().toISOString() })
+  }).catch(() => {});
+  return true;
+};
+
+function playNextSpeech() {
+  const next = speechQueue.shift();
+  if (!next) { speaking = false; window.lolaSpeaking = false; markSpeechDone(); return; }
+  speaking = true;
+  window.lolaSpeaking = true;
+  currentSpoken = next;
+  markSpoken(next);
+  fetch('/api/voice/speak', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: next })
+  })
+    .then(r => r.ok ? r.blob() : Promise.reject(new Error('speak said ' + r.status)))
+    .then(blob => {
+      const audio = new Audio(URL.createObjectURL(blob));
+      playingAudio = audio;
+      audio.onended = () => { URL.revokeObjectURL(audio.src); playingAudio = null; playNextSpeech(); };
+      audio.onerror = () => playNextSpeech();
+      audio.play().catch(() => playNextSpeech());   // autoplay blocked: skip ahead
+    })
+    .catch(() => playNextSpeech());
+}
+
+// Follow the reply as it is written, but never fight the person: if they have
+// scrolled up to read something, leave them where they are.
+function followTheReply() {
+  if (!atBottom) return;
+  transcript.scrollTo({ top: transcript.scrollHeight, behavior: 'smooth' });
+  atBottom = true;
+}
+
+// A tool is about to run: whatever was being written is finished — it is the
+// sentence explaining the call — so it stays, and stops being appended to.
+function keepPartial() {
+  liveBubble = null;
+}
+
+// The finished message replaces the live one: it is drawn from the answer event
+// or from history, so the scratch bubble must not survive alongside it.
+function closePartial() {
+  if (liveBubble) {
+    liveBubble.remove();
+    liveBubble = null;
+  }
+}
+
+// Grow the box with the text, up to a point.
+document.addEventListener('input', (e) => {
+  const field = e.target.closest && e.target.closest('[data-composer] textarea');
+  if (!field) return;
+  field.style.height = 'auto';
+  field.style.height = Math.min(field.scrollHeight, 180) + 'px';
+});
+</script>
+</body>
+</html>

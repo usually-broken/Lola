@@ -1,0 +1,30 @@
+# Build artifacts
+/lola
+/lola.exe
+*.test
+*.out
+
+# Editor and OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Local configuration and secrets — never commit these
+.env
+.env.*
+*.local.yaml
+secrets/
+credentials/
+
+# Saved sessions are local state, not source. Anchored to the repo root so it
+# cannot swallow a directory called sessions anywhere else — plugins/sessions is
+# source and the rule above it once ate the whole plugin.
+/sessions/
+
+# Logs — the harness writes one when it is run from the repo directory
+*.log
+
+# Providers added from the interface. Those normally live in the harness home,
+# but running with the repo as the home directory would put one here.
+/providers.yaml

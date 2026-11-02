@@ -1,0 +1,3 @@
+name: sessions
+description: Keeps the harness's sessions in one folder and hands the store to everything that needs one.
+entry: sessions.go

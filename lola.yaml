@@ -1,0 +1,113 @@
+# The plugin tree. Each entry is a plugin mounted, in this order.
+#
+# Add a plugin by adding its name here. Remove one by deleting its line.
+# The name must match a plugin registered in the code.
+#
+# agent_loop drives a task to completion. It is a plugin, so a different loop
+# can replace it.
+
+plugins:
+  # The mode the harness starts in. Swap this line for `creator` to begin with
+  # the tools for growing the harness.
+  - standard
+  - greet
+  - openai
+  # llmrouter is where model calls go: the endpoints, and which one is in force.
+  - llmrouter
+  # sessions owns the folder sessions live in and hands out the store. Without
+  # it mounted, nothing is saved: the loop and the interfaces ask the tree for a
+  # store rather than building their own.
+  - sessions
+  - agent_loop
+  - read_file
+  - write_file
+  - delete_file
+  - run_shell
+  # web_search looks things up and returns the top results.
+  - web_search
+  # web_fetch reads one page and returns it as text.
+  - web_fetch
+  # modechip puts the mode selector on the interface, and guardchip puts the
+  # approval one there. They are plugins like any other: adding another control
+  # is adding another plugin.
+  # promptcore contributes how the model is asked to behave, and promptdemo
+  # contributes one fact so the prompt seam can be seen working.
+  - promptpersona
+  - promptpretool
+  - promptaftertool
+  - promptmode
+  - modechip
+  - guardchip
+  # health serves a path of its own, so something outside the harness can ask
+  # what is running. It is a plugin that owns an address rather than a control.
+  - health
+  # composer owns the act of sending: the form posts here, and this hands the
+  # message to the run seam rather than the page doing either.
+  - composer
+  # tree is the list of what is in the tree, and the switches that change it.
+  - tree
+  # sessionlist serves the list of conversations, so the page does not have to
+  # know what a saved conversation looks like.
+  - sessionlist
+  # speak says a sentence out loud, which is the test half of voice: the page
+  # decides what a sentence is, and this turns it into audio.
+  # listen turns recorded audio into text, with a resident worker so a sentence
+  # does not pay for a model load.
+  - listen
+  - speak
+  - voice
+  # settingsscreen reads and changes what the harness is set to.
+  - settingsscreen
+  # settingsgeneral is the General section of the settings panel.
+  - settingsgeneral
+  # settingspermissions is the Permissions section of the settings panel.
+  - settingspermissions
+  # settingsproviders is the Providers section of the settings panel.
+  - settingsproviders
+  # keep remembers choices between runs — the model, the mode, and anything a
+  # future plugin wants kept. Without it, settings live in memory and are gone
+  # when the harness stops.
+  - keep
+  - tui
+  - web
+
+# Where model calls go. The first entry is the one the harness starts on.
+#
+# Each entry is a name, a url, and — only if the endpoint needs one — a key.
+# Put the *name of an environment variable* in key: and the key is read from the
+# environment when a call is made, so nothing secret lives in this file. Anything
+# that is not a valid variable name is taken as the key itself, which works, but
+# puts a secret in a file — so don't, if the file is ever going to be committed.
+#
+#   providers:
+#     - name: openrouter
+#       url: https://openrouter.ai/api/v1
+#       key: OPENROUTER_API_KEY
+
+providers:
+  - name: local
+    url: http://127.0.0.1:11434/v1
+
+# Where the agent's file tools may touch. Anything outside these roots is
+# refused. Leave it out and the default workspace (~/.lola/workspace) is used.
+#
+# workspace:
+#   - ~/.lola/workspace
+#   - ~/some-project
+
+# The guard policy. Each list, when set, replaces the built-in default, so you
+# can see and change exactly what applies. Leave a list out to keep the default.
+#
+#   protected  paths that may never be touched, whatever the answer
+#   gated      paths that need approval before a write
+#   dangerous  shell commands that need approval before they run
+#
+# guard:
+#   protected:
+#     - ~/.lola/sessions
+#     - ~/.lola/profiles
+#   gated:
+#     - ~/.lola/lola.yaml
+#   dangerous:
+#     - rm
+#     - sudo

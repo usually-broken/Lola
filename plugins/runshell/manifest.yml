@@ -1,0 +1,3 @@
+name: run_shell
+description: Run a shell command and return its combined standard output and error.
+entry: runshell.go
