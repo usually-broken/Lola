@@ -1,0 +1,3 @@
+name: modechip
+description: Offers the mode selector to the interface. A plugin that changes how the harness looks rather than what it can do.
+entry: modechip.go

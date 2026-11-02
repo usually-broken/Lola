@@ -1,0 +1,66 @@
+name: Release
+
+# Push a tag like v0.1.0 and this builds the binaries, archives them with a
+# checksums file, and attaches them all to a GitHub Release.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: build
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME}"
+          mkdir -p dist
+
+          for target in darwin/amd64 darwin/arm64 linux/amd64 linux/arm64 windows/amd64 windows/arm64; do
+            os="${target%/*}"
+            arch="${target#*/}"
+            name="lola_${version}_${os}_${arch}"
+            ext=""
+            if [ "$os" = "windows" ]; then ext=".exe"; fi
+
+            GOOS="$os" GOARCH="$arch" CGO_ENABLED=0 \
+              go build -trimpath -ldflags "-s -w -X main.version=${version}" \
+              -o "dist/lola${ext}" .
+
+            if [ "$os" = "windows" ]; then
+              zip -qj "dist/${name}.zip" "dist/lola${ext}"
+            else
+              tar -czf "dist/${name}.tar.gz" -C dist lola
+            fi
+            rm -f "dist/lola${ext}"
+          done
+
+          cd dist
+          if command -v shasum >/dev/null 2>&1; then
+            shasum -a 256 ./*.tar.gz ./*.zip > checksums.txt
+          else
+            sha256sum ./*.tar.gz ./*.zip > checksums.txt
+          fi
+          ls -l
+
+      - name: release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/checksums.txt
+          generate_release_notes: true

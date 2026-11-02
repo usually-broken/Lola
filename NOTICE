@@ -1,0 +1,12 @@
+Lola
+Copyright 2026 The Lola Authors
+
+An agent harness where everything is a plugin.
+
+https://github.com/usually-broken/Lola
+
+The shape of this project — everything in the tree being a plugin, and the
+interface's proportions — comes from DeepSeek Harness (dsh):
+https://github.com/deepseek-ai/deepseek-harness
+
+The code here is our own.

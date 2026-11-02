@@ -1,0 +1,3 @@
+name: openai
+description: Model adapter for any OpenAI-compatible /chat/completions endpoint. Ollama by default; point BaseURL elsewhere for hosted gateways.
+entry: openai.go

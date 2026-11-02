@@ -1,0 +1,6 @@
+# Keep line endings LF on every platform.
+#
+# Git checks out CRLF by default on Windows, which turns every file into a
+# different set of bytes than CI saw on Linux, and makes gofmt report the whole
+# tree as unformatted. This keeps every checkout identical.
+* text=auto eol=lf

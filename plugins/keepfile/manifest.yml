@@ -1,0 +1,3 @@
+name: keep
+description: Remembers choices between runs in one file, by scope. A plugin that owns persistence rather than a setting.
+entry: keepfile.go

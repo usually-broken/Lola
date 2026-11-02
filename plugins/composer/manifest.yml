@@ -1,0 +1,3 @@
+name: composer
+description: Owns the act of sending. The page keeps the form and posts here; this plugin hands the message to the run seam.
+entry: composer.go

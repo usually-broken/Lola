@@ -1,0 +1,3 @@
+name: guardchip
+description: Offers how much the guard asks before it acts — writes, approval, or nothing. A plugin that changes the interface rather than what the harness can do.
+entry: guardchip.go
