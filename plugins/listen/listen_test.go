@@ -16,6 +16,9 @@ func withSettings(t *testing.T, body string) {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	// Windows asks for USERPROFILE, not HOME, so a test that only sets HOME quietly reads
+	// the real one.
+	t.Setenv("USERPROFILE", home)
 	if err := os.MkdirAll(filepath.Join(home, ".lola"), 0o755); err != nil {
 		t.Fatal(err)
 	}
