@@ -1,24 +1,23 @@
-// Package listen turns recorded audio into text.
+// Package listen turns recorded audio into text by asking a transcription endpoint.
 //
-// The recogniser is MLX and lives in a Python virtualenv, so the harness cannot link
-// it: this plugin starts one resident worker and talks to it over stdin, because
-// loading the model per request costs a second and a half and voice cannot afford it.
+// It holds no model of its own. Where the audio goes is a setting, and an install that
+// has not set one says so plainly instead of failing in a way that looks like a broken
+// microphone.
 //
-// The plugin owns a route and a process, and gives both back when unmounted. Nothing
-// here captures audio: whoever holds the stream records, and posts what it recorded.
+// Nothing here captures audio: whoever holds the stream records, and posts what it
+// recorded.
 package listen
 
 import (
-	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/usually-broken/lola/core"
@@ -26,72 +25,26 @@ import (
 	"github.com/usually-broken/lola/core/routes"
 )
 
-// asksBeforeRestart is how many sentences a worker may transcribe before being replaced.
-// Loading the recogniser again is a couple of seconds; leaving one running for hours is
-// how a machine ends up swapping.
-const asksBeforeRestart = 40
-
-// Path is the address this plugin answers.
+// Path is the address this plugin answers: POST audio, get text.
 const Path = "/api/voice/listen"
 
-// defaultWorker is where the recogniser lives on a machine that has one.
-func defaultWorker() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(home, "lola-voice", "worker.py")
-}
-
-// A machine that can transcribe is not every machine, so both paths are settings
-// rather than assumptions: point them at a worker, or the plugin simply says it has
-// no ear.
-func setting(name, fallback string) string {
-	if v := strings.TrimSpace(os.Getenv(name)); v != "" {
-		return v
-	}
-	return fallback
-}
+// transcriptionPath is the shape every OpenAI-compatible transcription service speaks.
+const transcriptionPath = "/audio/transcriptions"
 
 func init() {
 	plugin.Register("listen", func(d plugin.Deps) (core.Plugin, error) {
-		python := setting("LOLA_LISTEN_PYTHON", "")
-		if python == "" {
-			if home, err := os.UserHomeDir(); err == nil {
-				python = filepath.Join(home, "lola-voice", ".venv", "bin", "python")
-			}
-		}
-		return &Plugin{
-			routes: d.Routes,
-			python: python,
-			script: setting("LOLA_LISTEN_SCRIPT", defaultWorker()),
-		}, nil
+		return &Plugin{routes: d.Routes}, nil
 	})
 }
 
-// Plugin answers one route with the help of a resident worker.
+// Plugin hears.
 type Plugin struct {
 	routes *routes.Registry
-	python string
-	script string
 
-	// asks counts transcriptions since the worker started. MLX fragments over time even
-	// with its cache released, so the worker is replaced every so often rather than left
-	// to grow until somebody notices their machine slowing down.
-	asks int
-
-	mu      sync.Mutex
-	cmd     *exec.Cmd
-	stdin   io.WriteCloser
-	replies chan reply
-	dead    string
-}
-
-// reply is one answer from the worker, or why it could not give one.
-type reply struct {
-	Text  string `json:"text"`
-	MS    int    `json:"ms"`
-	Error string `json:"error"`
+	// client gives a slow endpoint room to finish. A transcription of a sentence takes a
+	// second or two; cutting it off at a few hundred milliseconds would be worse than
+	// waiting.
+	client *http.Client
 }
 
 func (p *Plugin) Name() string { return "listen" }
@@ -99,188 +52,160 @@ func (p *Plugin) Name() string { return "listen" }
 func (p *Plugin) About() plugin.About {
 	return plugin.About{
 		Kind: plugin.KindVoice,
-		What: "Turns recorded audio into text, using a resident recogniser so a sentence does not pay for a model load.",
+		What: "Turns recorded audio into text, through a transcription endpoint you set.",
 	}
 }
 
-// Setup starts the worker and offers the route. A worker that will not start is
-// reported rather than hidden: a plugin that silently does nothing is worse than one
-// that says why.
+// Setup offers the route and gives it back when unmounted.
 func (p *Plugin) Setup() (func() error, error) {
-	p.replies = make(chan reply, 8)
-
-	if err := p.start(); err != nil {
-		p.dead = err.Error()
-	}
-
 	if p.routes == nil {
-		return func() error { p.stop(); return nil }, nil
+		return func() error { return nil }, nil
+	}
+	if p.client == nil {
+		p.client = &http.Client{Timeout: 60 * time.Second}
 	}
 	if err := p.routes.Handle(Path, http.HandlerFunc(p.hear)); err != nil {
-		p.stop()
 		return nil, err
 	}
-
 	return func() error {
-		if p.routes != nil {
-			p.routes.Remove(Path)
-		}
-		p.stop()
+		p.routes.Remove(Path)
 		return nil
 	}, nil
 }
 
-// start launches the worker and waits for it to say it is ready.
-func (p *Plugin) start() error {
-	if p.python == "" || p.script == "" {
-		return fmt.Errorf("no worker configured: set LOLA_LISTEN_PYTHON and LOLA_LISTEN_SCRIPT")
-	}
-	if _, err := os.Stat(p.script); err != nil {
-		return fmt.Errorf("worker not found at %s", p.script)
-	}
-
-	cmd := exec.Command(p.python, p.script)
-	cmd.Stderr = os.Stderr // a crash explains itself where someone will see it
-
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		return fmt.Errorf("worker stdin: %w", err)
-	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return fmt.Errorf("worker stdout: %w", err)
-	}
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("start worker: %w", err)
-	}
-
-	p.cmd, p.stdin = cmd, stdin
-
-	scanner := bufio.NewScanner(stdout)
-	scanner.Buffer(make([]byte, 0, 16*1024), 1<<20)
-
-	ready := make(chan error, 1)
-	go func() {
-		first := true
-		for scanner.Scan() {
-			line := scanner.Bytes()
-			var probe struct {
-				Ready bool   `json:"ready"`
-				Error string `json:"error"`
-			}
-			if json.Unmarshal(line, &probe) != nil {
-				continue
-			}
-			if first && probe.Ready {
-				first = false
-				ready <- nil
-				continue
-			}
-			var r reply
-			if json.Unmarshal(line, &r) == nil {
-				p.replies <- r
-			}
-		}
-		if first {
-			ready <- fmt.Errorf("worker exited before it was ready")
-		}
-	}()
-
-	select {
-	case err := <-ready:
-		return err
-	case <-time.After(90 * time.Second):
-		// The first load reads weights from disk; slower than that is broken.
-		return fmt.Errorf("worker did not become ready")
-	}
-}
-
-// stop closes the worker. Best effort: it is going away either way.
-func (p *Plugin) stop() {
-	if p.stdin != nil {
-		p.stdin.Close()
-	}
-	if p.cmd != nil && p.cmd.Process != nil {
-		p.cmd.Process.Kill()
-	}
-}
-
-// hear takes audio, writes it down, and asks the worker what was said.
+// hear sends the recording on and answers with what was said.
 func (p *Plugin) hear(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "listen: POST only", http.StatusMethodNotAllowed)
+		http.Error(w, "listen: POST audio", http.StatusMethodNotAllowed)
 		return
 	}
-	if p.dead != "" {
-		http.Error(w, "listen: "+p.dead, http.StatusServiceUnavailable)
+
+	// The client is normally built in Setup, but a plugin with no route to serve never
+	// gets that far, and hearing should not depend on being mounted to a page.
+	if p.client == nil {
+		p.client = &http.Client{Timeout: 60 * time.Second}
+	}
+
+	settings := loadSettings()
+	if settings.URL == "" {
+		http.Error(w, "listen: no transcription endpoint set — add one in Settings, Voice", http.StatusServiceUnavailable)
 		return
 	}
 
 	audio, err := io.ReadAll(io.LimitReader(r.Body, 32<<20))
-	if err != nil || len(audio) == 0 {
-		http.Error(w, "listen: no audio", http.StatusBadRequest)
-		return
-	}
-
-	file, err := os.CreateTemp("", "lola-listen-*.wav")
 	if err != nil {
-		http.Error(w, "listen: "+err.Error(), http.StatusInternalServerError)
+		http.Error(w, "listen: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	defer os.Remove(file.Name())
-
-	if _, err := file.Write(audio); err != nil {
-		file.Close()
-		http.Error(w, "listen: "+err.Error(), http.StatusInternalServerError)
+	if len(audio) == 0 {
+		http.Error(w, "listen: empty recording", http.StatusBadRequest)
 		return
 	}
-	file.Close()
 
-	answer, err := p.ask(file.Name())
+	started := time.Now()
+	text, err := p.transcribe(settings, audio)
 	if err != nil {
 		http.Error(w, "listen: "+err.Error(), http.StatusBadGateway)
-		return
-	}
-	if answer.Error != "" {
-		http.Error(w, "listen: "+answer.Error, http.StatusBadGateway)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
-		"text": answer.Text,
-		"ms":   answer.MS,
+		"text": strings.TrimSpace(text),
+		"ms":   time.Since(started).Milliseconds(),
 	})
 }
 
-// ask sends one path and waits for its answer. One at a time: a worker reading stdin
-// cannot be asked two things at once and give the answers back in order.
-func (p *Plugin) ask(path string) (reply, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+// transcribe posts the audio as multipart, which is what these services expect: a file
+// field, a model name, and JSON back with the text in it.
+func (p *Plugin) transcribe(settings settings, audio []byte) (string, error) {
+	var body bytes.Buffer
+	form := multipart.NewWriter(&body)
 
-	if p.stdin == nil {
-		return reply{}, fmt.Errorf("no worker running")
+	file, err := form.CreateFormFile("file", "audio.wav")
+	if err != nil {
+		return "", err
 	}
-	if _, err := fmt.Fprintln(p.stdin, path); err != nil {
-		return reply{}, fmt.Errorf("worker is gone: %w", err)
+	if _, err := file.Write(audio); err != nil {
+		return "", err
 	}
-
-	select {
-	case r := <-p.replies:
-		p.asks++
-		if p.asks >= asksBeforeRestart {
-			// Reload costs about two seconds; an unbounded worker costs the machine.
-			p.stop()
-			if err := p.start(); err != nil {
-				p.dead = err.Error()
-			}
-			p.asks = 0
+	if settings.Model != "" {
+		if err := form.WriteField("model", settings.Model); err != nil {
+			return "", err
 		}
-		return r, nil
-	case <-time.After(60 * time.Second):
-		return reply{}, fmt.Errorf("worker did not answer")
 	}
+	if err := form.Close(); err != nil {
+		return "", err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, endpoint(settings.URL), &body)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", form.FormDataContentType())
+	if settings.Key != "" {
+		req.Header.Set("Authorization", "Bearer "+settings.Key)
+	}
+
+	res, err := p.client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer res.Body.Close()
+
+	reply, err := io.ReadAll(io.LimitReader(res.Body, 1<<20))
+	if err != nil {
+		return "", err
+	}
+	if res.StatusCode < 200 || res.StatusCode > 299 {
+		return "", fmt.Errorf("endpoint said %d: %s", res.StatusCode, strings.TrimSpace(string(reply)))
+	}
+
+	var out struct {
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal(reply, &out); err != nil {
+		return "", fmt.Errorf("endpoint did not answer with text: %w", err)
+	}
+	return out.Text, nil
+}
+
+// endpoint accepts a base URL or the full path, because both get pasted.
+func endpoint(url string) string {
+	url = strings.TrimRight(strings.TrimSpace(url), "/")
+	if strings.HasSuffix(url, transcriptionPath) {
+		return url
+	}
+	return url + transcriptionPath
+}
+
+// settings is the part of the voice settings this plugin needs. It reads the same file
+// the voice section writes, so there is one place to say where audio goes.
+type settings struct {
+	URL   string `json:"listenUrl"`
+	Model string `json:"listenModel"`
+	Key   string `json:"listenKey"`
+}
+
+// loadSettings reads ~/.lola/voice.json. A missing or broken file means "not configured",
+// which is a thing to say clearly, not an error to shout about.
+func loadSettings() settings {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return settings{}
+	}
+	body, err := os.ReadFile(filepath.Join(home, ".lola", "voice.json"))
+	if err != nil {
+		return settings{}
+	}
+	var out settings
+	if err := json.Unmarshal(body, &out); err != nil {
+		return settings{}
+	}
+	out.URL = strings.TrimSpace(out.URL)
+	out.Model = strings.TrimSpace(out.Model)
+	out.Key = strings.TrimSpace(out.Key)
+	return out
 }
 
 var _ core.Plugin = (*Plugin)(nil)
