@@ -21,6 +21,12 @@ type Settings struct {
 
 	// The ball. Core is the middle, cloud is the white (or not white) drifting through
 	// it, rim is the edge.
+	// The ear. Empty means "not configured yet", which is said plainly when somebody tries
+	// to use it rather than being invented.
+	ListenURL   string `json:"listenUrl"`
+	ListenModel string `json:"listenModel"`
+	ListenKey   string `json:"listenKey"`
+
 	OrbCore  string `json:"orbCore"`
 	OrbCloud string `json:"orbCloud"`
 	OrbRim   string `json:"orbRim"`
@@ -138,6 +144,18 @@ const settingsSection = `<style>
 </div>
 
 <div class="field">
+  <div class="label">Transcription endpoint</div>
+  <div class="why">Where recordings go to be turned into text. Any OpenAI-shaped <code>/audio/transcriptions</code>. Empty means voice mode has no ear.</div>
+  <input id="voiceListenUrl" type="text" spellcheck="false" placeholder="https://api.example.com/v1">
+</div>
+
+<div class="field">
+  <div class="label">Transcription model</div>
+  <div class="why">The model at that endpoint, sent with each recording.</div>
+  <input id="voiceListenModel" type="text" spellcheck="false" placeholder="whisper-large-v3">
+</div>
+
+<div class="field">
   <div class="label">Ball</div>
   <div class="why">The middle, the cloud drifting through it, and the rim.</div>
   <div class="voice-grid" style="grid-template-columns: repeat(3, minmax(0, 1fr));">
@@ -152,7 +170,7 @@ const settingsSection = `<style>
   <span id="voiceNote" class="why"></span>
 </div>
 
-<script src="/api/voice/settings.js?v=2"></script>`
+<script src="/api/voice/settings.js?v=3"></script>`
 
 // settingsHandler reads and writes the file.
 func (p *Plugin) settingsHandler(w http.ResponseWriter, r *http.Request) {

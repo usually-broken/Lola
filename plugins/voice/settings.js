@@ -13,6 +13,8 @@ async function load() {
     box('voiceEndpoint').value = s.endpoint || '';
     box('voiceModel').value = s.model || '';
     box('voiceName').value = s.voice || '';
+    box('voiceListenUrl').value = s.listenUrl || '';
+    box('voiceListenModel').value = s.listenModel || '';
     box('voiceOrbCore').value = s.orbCore || '';
     box('voiceOrbCloud').value = s.orbCloud || '';
     box('voiceOrbRim').value = s.orbRim || '';
@@ -31,6 +33,8 @@ async function save() {
     endpoint: box('voiceEndpoint').value.trim(),
     model: box('voiceModel').value.trim(),
     voice: box('voiceName').value.trim(),
+    listenUrl: box('voiceListenUrl').value.trim(),
+    listenModel: box('voiceListenModel').value.trim(),
     orbCore: box('voiceOrbCore').value.trim(),
     orbCloud: box('voiceOrbCloud').value.trim(),
     orbRim: box('voiceOrbRim').value.trim(),
