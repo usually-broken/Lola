@@ -38,6 +38,7 @@ import (
 	_ "github.com/usually-broken/lola/plugins/settingsproviders"
 	_ "github.com/usually-broken/lola/plugins/settingsscreen"
 	_ "github.com/usually-broken/lola/plugins/speak"
+	_ "github.com/usually-broken/lola/plugins/speeds"
 	_ "github.com/usually-broken/lola/plugins/standard"
 	_ "github.com/usually-broken/lola/plugins/tree"
 	_ "github.com/usually-broken/lola/plugins/tui"

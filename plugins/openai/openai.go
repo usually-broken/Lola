@@ -159,6 +159,14 @@ type chatRequest struct {
 	Tools       []wireTool    `json:"tools,omitempty"`
 	Temperature *float64      `json:"temperature,omitempty"`
 	Stream      bool          `json:"stream"`
+
+	// StreamOptions asks the provider to count the answer even while streaming,
+	// because without it the final chunk carries no usage at all.
+	StreamOptions *streamOptions `json:"stream_options,omitempty"`
+}
+
+type streamOptions struct {
+	IncludeUsage bool `json:"include_usage"`
 }
 
 type chatResponse struct {

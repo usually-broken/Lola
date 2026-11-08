@@ -20,11 +20,12 @@ import (
 // and indexed per call — so they are assembled here and returned whole.
 func (p *Provider) Stream(ctx context.Context, req llm.Request, onText func(string) error) (llm.Response, error) {
 	body, err := json.Marshal(chatRequest{
-		Model:       req.Model,
-		Messages:    toWireMessages(req.Messages),
-		Tools:       toWireTools(req.Tools),
-		Temperature: req.Temperature,
-		Stream:      true,
+		Model:         req.Model,
+		Messages:      toWireMessages(req.Messages),
+		Tools:         toWireTools(req.Tools),
+		Temperature:   req.Temperature,
+		Stream:        true,
+		StreamOptions: &streamOptions{IncludeUsage: true},
 	})
 	if err != nil {
 		return llm.Response{}, fmt.Errorf("openai: encode request: %w", err)
@@ -62,6 +63,7 @@ func (p *Provider) Stream(ctx context.Context, req llm.Request, onText func(stri
 		content strings.Builder
 		calls   = map[int]*streamCall{}
 		order   []int
+		tokens  int
 	)
 
 	scanner := bufio.NewScanner(httpResp.Body)
@@ -88,6 +90,11 @@ func (p *Provider) Stream(ctx context.Context, req llm.Request, onText func(stri
 		}
 		if chunk.Error != nil {
 			return llm.Response{}, fmt.Errorf("openai: %s", chunk.Error.Message)
+		}
+		// The usage arrives on a chunk with no choices at all, which is why it is
+		// read before the choices are checked.
+		if chunk.Usage != nil && chunk.Usage.CompletionTokens > 0 {
+			tokens = chunk.Usage.CompletionTokens
 		}
 		if len(chunk.Choices) == 0 {
 			continue
@@ -128,7 +135,7 @@ func (p *Provider) Stream(ctx context.Context, req llm.Request, onText func(stri
 		return llm.Response{}, fmt.Errorf("openai: read stream: %w", err)
 	}
 
-	out := llm.Response{Content: content.String()}
+	out := llm.Response{Content: content.String(), Tokens: tokens}
 	for _, i := range order {
 		call := calls[i]
 		args := call.args.String()
@@ -151,6 +158,9 @@ type streamChunk struct {
 	Choices []struct {
 		Delta *streamDelta `json:"delta"`
 	} `json:"choices"`
+	Usage *struct {
+		CompletionTokens int `json:"completion_tokens"`
+	} `json:"usage,omitempty"`
 	Error *struct {
 		Message string `json:"message"`
 	} `json:"error,omitempty"`

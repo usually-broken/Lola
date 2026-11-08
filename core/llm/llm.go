@@ -6,6 +6,7 @@ package llm
 import (
 	"context"
 	"encoding/json"
+	"time"
 )
 
 // Role identifies who produced a message.
@@ -29,6 +30,40 @@ type Message struct {
 
 	// ToolCallID is set on a tool message to say which call it answers.
 	ToolCallID string `json:"tool_call_id,omitempty"`
+
+	// Timing rides with the assistant message that it describes, so how long the
+	// reply took is stored beside the reply rather than in a separate record that
+	// would have to be kept in step with it.
+	Timing *Timing `json:"timing,omitempty"`
+}
+
+// Timing is how long a reply took to start, and how fast it then arrived.
+type Timing struct {
+	// FirstWordMS is milliseconds from sending the request to the first piece of
+	// text. Zero when the provider does not stream, because then there is no
+	// first piece to measure.
+	FirstWordMS int64 `json:"firstWordMs"`
+
+	// TokensPerSecond is how quickly the rest arrived, once it had started,
+	// counted in tokens rather than characters because that is the unit anyone
+	// talking about model speed means.
+	TokensPerSecond float64 `json:"tokensPerSecond"`
+
+	// Tokens is how many the provider reported for this reply, or zero when it
+	// reported none — a model's own count is the only honest one.
+	Tokens int `json:"tokens,omitempty"`
+
+	// Chunks is how many pieces the reply arrived in. A reply that came in one
+	// piece was never seen decoding, so its rate cannot be measured.
+	Chunks int `json:"chunks,omitempty"`
+
+	// Model is which model produced the reply, so speeds can be compared rather
+	// than averaged into one meaningless number.
+	Model string `json:"model,omitempty"`
+
+	// At is when the reply was made, which is the only way "the last 24 hours"
+	// can mean anything later.
+	At time.Time `json:"at,omitempty"`
 }
 
 // ToolCall is a model's request to run one tool.
@@ -66,6 +101,9 @@ type Response struct {
 
 	// ToolCalls is what the model wants run, if anything.
 	ToolCalls []ToolCall
+
+	// Tokens is how many the provider says the answer cost, when it says.
+	Tokens int
 }
 
 // Provider is the seam. A provider answers a Request with a Response. Every
