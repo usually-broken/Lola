@@ -1224,6 +1224,13 @@ function setBusy(state) {
   busy = state;
   sendBtn.disabled = state;
   sendBtn.textContent = state ? '…' : '↑';
+
+  // A finished reply is when there is something new to show.
+  // No repaint — that would wipe what has not been saved yet. Sections are told
+  // instead, and they decorate the reply that has just landed.
+  // No repaint here — that wipes what the server has not saved yet. Sections are
+  // told instead, and they decorate the reply that has just landed.
+  if (!state) document.dispatchEvent(new CustomEvent('lola:reply'));
 }
 
 // The live stream.
@@ -1377,14 +1384,60 @@ async function resumeSession(id) {
 
 // Redraw the conversation from the harness's own history, which is what makes
 // a resumed session show up rather than an empty transcript.
+
+
+// Timings under replies come from the history, so a reload shows every one of
+// them rather than only the newest.
+function timingLine(timing) {
+  const first = timing.firstWordMs ? (timing.firstWordMs >= 1000
+    ? (timing.firstWordMs / 1000).toFixed(1) + 's'
+    : Math.round(timing.firstWordMs) + 'ms') : '—';
+  const rate = timing.tokensPerSecond ? Math.round(timing.tokensPerSecond) : '—';
+  return 'TTFT: ' + first + ' • TPS: ' + rate;
+}
+
+// The session's average over its most recent replies: one slow answer is noise,
+// ten slow answers is the model.
+function addTimingAverage(measured) {
+  if (!window.lolaSpeeds) return;
+  const recent = measured.slice(-10);
+  if (recent.length < 2) return;
+
+  const mean = (pick) => recent.reduce((sum, t) => sum + pick(t), 0) / recent.length;
+  const first = Math.round(mean((t) => t.firstWordMs || 0));
+  const rate = Math.round(mean((t) => t.tokensPerSecond || 0));
+
+  const row = document.createElement('div');
+  row.className = 'timing';
+  row.style.fontSize = '0.72em';
+  row.style.opacity = '0.45';
+  row.style.marginTop = '0.6em';
+  row.textContent = 'last ' + recent.length + ' — TTFT: ' + first + 'ms • TPS: ' + rate;
+  lines.appendChild(row);
+}
+
+function addTiming(timing) {
+  if (!window.lolaSpeeds) return;
+  const row = document.createElement('div');
+  row.className = 'timing';
+  row.style.fontSize = '0.72em';
+  row.style.opacity = '0.55';
+  row.style.marginTop = '0.15em';
+  row.textContent = timingLine(timing);
+  lines.appendChild(row);
+}
+
 async function loadHistory() {
   try {
     const msgs = await (await fetch('/api/history')).json();
     lines.innerHTML = '';
+    // A new conversation means the running numbers start again.
+    document.dispatchEvent(new CustomEvent('lola:history'));
     if (!msgs.length) {
       lines.appendChild(emptyState());
       return;
     }
+    const measured = [];
     for (const m of msgs) {
       if (m.role === 'user') {
         add('msg you', m.text);
@@ -1392,8 +1445,23 @@ async function loadHistory() {
         // What it said is a message; the call it made is a line under it.
         if (m.text) add('msg lola', m.text);
         if (m.tool) add('step', '', m.tool);
+        if (m.timing) {
+          addTiming(m.timing);
+          measured.push(m.timing);
+        }
+        // The page does not know what a timing is. It says the reply happened and
+        // whoever cares decorates it.
+        if (m.text) {
+          document.dispatchEvent(new CustomEvent('lola:message', { detail: m }));
+        }
       }
     }
+
+    addTimingAverage(measured);
+
+    // Said after the transcript exists: anything decorating it has to run now, not
+    // before the page has drawn it, or the decoration is wiped by the draw.
+    document.dispatchEvent(new CustomEvent('lola:history-drawn'));
   } catch { /* leave it */ }
 }
 
@@ -2291,6 +2359,31 @@ async function loadState() {
 }
 loadState();
 loadSessions();
+loadHistory();
+
+// Sections may bring a script for the conversation itself, not only for their own
+// pane. Anything a section names is loaded here, so a plugin can draw on the page
+// without the page knowing what it draws.
+(async function loadSectionScripts() {
+  try {
+    const panes = await (await fetch('/api/panes')).json();
+    const seen = new Set();
+    for (const pane of panes) {
+      const html = (pane.body || '') + (pane.source || '');
+      for (const match of html.matchAll(/src="([^"]+)"/g)) {
+        if (seen.has(match[1])) continue;
+        seen.add(match[1]);
+        const el = document.createElement('script');
+        el.src = match[1];
+        document.body.appendChild(el);
+      }
+    }
+    // Redrawn now that the scripts are in place: the first draw happened before
+    // anything was listening, so a section that decorates messages would have
+    // missed the whole conversation.
+    loadHistory();
+  } catch { /* no sections, no scripts */ }
+})();
 loadPanes();
 loadModelPicker();
 loadComposer();

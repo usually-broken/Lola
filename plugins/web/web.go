@@ -173,7 +173,10 @@ type event struct {
 	Kind string `json:"kind"`
 	Text string `json:"text,omitempty"`
 	Tool string `json:"tool,omitempty"`
-	Busy bool   `json:"busy,omitempty"`
+
+	// Timing is what the reply cost in time, when it was measured.
+	Timing *llm.Timing `json:"timing,omitempty"`
+	Busy   bool        `json:"busy,omitempty"`
 
 	// ID identifies an approval question, so the answer can be matched to it.
 	ID string `json:"id,omitempty"`
@@ -251,6 +254,9 @@ func (u *ui) index(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "web: page missing", http.StatusInternalServerError)
 		return
 	}
+	// Never cached. A page that can be served from a day-old copy makes every
+	// change to it look as though it did nothing at all.
+	w.Header().Set("Cache-Control", "no-store, max-age=0")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write(page)
 }
@@ -486,6 +492,10 @@ type historyMessage struct {
 	Role string `json:"role"`
 	Text string `json:"text"`
 	Tool string `json:"tool,omitempty"`
+
+	// Timing is what the reply cost in time, when it was measured. It travels
+	// with the message so a page can show it without asking anything else.
+	Timing *llm.Timing `json:"timing,omitempty"`
 }
 
 // history returns the conversation so far, so the page can redraw it after a
@@ -495,7 +505,7 @@ func (u *ui) history(w http.ResponseWriter, r *http.Request) {
 
 	out := make([]historyMessage, 0, len(msgs))
 	for _, m := range msgs {
-		row := historyMessage{Role: string(m.Role), Text: m.Content}
+		row := historyMessage{Role: string(m.Role), Text: m.Content, Timing: m.Timing}
 		if len(m.ToolCalls) > 0 {
 			row.Tool = m.ToolCalls[0].Name
 		}

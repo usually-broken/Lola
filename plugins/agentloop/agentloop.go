@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/usually-broken/lola/core"
 	"github.com/usually-broken/lola/core/agent"
@@ -246,11 +247,20 @@ func (p *Plugin) run(ctx context.Context, provider llm.Provider, model, task str
 			err  error
 		)
 		streamed := false
+		sent := time.Now()
+		var firstSeen time.Time
+		chars := 0
+		chunks := 0
 		if s, ok := provider.(llm.Streamer); ok {
 			resp, err = s.Stream(ctx, req, func(delta string) error {
 				if delta == "" {
 					return nil
 				}
+				if firstSeen.IsZero() {
+					firstSeen = time.Now()
+				}
+				chars += len(delta)
+				chunks++
 				streamed = true
 				if p.OnDelta != nil {
 					p.OnDelta(delta)
@@ -264,10 +274,36 @@ func (p *Plugin) run(ctx context.Context, provider llm.Provider, model, task str
 			return agent.Result{}, fmt.Errorf("agent: step %d: %w", step, err)
 		}
 
+		// Said out loud rather than kept: what the model costs in time is the
+		// difference between a harness that feels alive and one that feels dead,
+		// and nothing else in here is in a position to measure it.
+		plugin.ReportTurn(plugin.Turn{
+			Started: sent,
+			First:   firstSeen,
+			Done:    time.Now(),
+			Chars:   chars,
+		})
+
 		assistant := llm.Message{
 			Role:      llm.RoleAssistant,
 			Content:   resp.Content,
 			ToolCalls: resp.ToolCalls,
+		}
+		if !firstSeen.IsZero() {
+			timing := &llm.Timing{
+				FirstWordMS: firstSeen.Sub(sent).Milliseconds(),
+				Tokens:      resp.Tokens,
+				Chunks:      chunks,
+				Model:       model,
+				At:          time.Now(),
+			}
+			// Only a token count the provider gave can make a rate; characters
+			// divided by four is a guess, and a guess has no place in a number
+			// presented as a measurement.
+			if resp.Tokens > 0 {
+				timing.TokensPerSecond = float64(resp.Tokens) / time.Since(firstSeen).Seconds()
+			}
+			assistant.Timing = timing
 		}
 		p.conv.Append(assistant)
 
