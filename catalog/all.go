@@ -23,6 +23,7 @@ import (
 	_ "github.com/usually-broken/lola/plugins/keepfile"
 	_ "github.com/usually-broken/lola/plugins/listen"
 	_ "github.com/usually-broken/lola/plugins/llmrouter"
+	_ "github.com/usually-broken/lola/plugins/memory"
 	_ "github.com/usually-broken/lola/plugins/modechip"
 	_ "github.com/usually-broken/lola/plugins/openai"
 	_ "github.com/usually-broken/lola/plugins/promptaftertool"
