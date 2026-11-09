@@ -1090,6 +1090,8 @@ button:disabled { opacity: 0.5; cursor: default; }
 </div>
 
 
+<script src="/assets/marked.min.js"></script>
+<script src="/assets/purify.min.js"></script>
 <script>
 // ---------------------------------------------------------------------
 // The client. Talks to the harness over Server-Sent Events, so a run's
@@ -1121,50 +1123,18 @@ function esc(s) {
 }
 
 function markdown(text) {
-  const parts = esc(text).split(/```/);
-  let out = '';
-
-  parts.forEach((chunk, i) => {
-    if (i % 2 === 1) {
-      const nl = chunk.indexOf('\n');
-      const code = nl === -1 ? chunk : chunk.slice(nl + 1);
-      out += '<pre><code>' + code.replace(/\n$/, '') + '</code></pre>';
-      return;
-    }
-
-    let body = chunk;
-    body = body.replace(/`([^`]+)`/g, '<code>$1</code>');
-    body = body.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-
-    const cells = (line) => line.replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
-    const isRule = (line) => /^\|[\s:|-]+\|$/.test(line);
-
-    out += body.split(/\n{2,}/).map((block) => {
-      if (!block.trim()) return '';
-
-      // A table: a header row of pipes, a rule row under it, then the body.
-      const rows = block.split('\n').map((l) => l.trim()).filter((l) => l !== '');
-      if (rows.length >= 2 && rows[0].startsWith('|') && isRule(rows[1])) {
-        const head = cells(rows[0]);
-        const rest = rows.slice(2).map(cells);
-        let t = '<table><thead><tr>' + head.map((h) => '<th>' + h + '</th>').join('') + '</tr></thead><tbody>';
-        t += rest.map((r) => '<tr>' + r.map((c) => '<td>' + c + '</td>').join('') + '</tr>').join('');
-        return t + '</tbody></table>';
-      }
-
-      if (/^\s*[-*]\s+/m.test(block)) {
-        const items = block.split('\n').filter((l) => l.trim())
-          .map((l) => '<li>' + l.replace(/^\s*[-*]\s+/, '') + '</li>').join('');
-        return '<ul>' + items + '</ul>';
-      }
-      if (/^#{1,6}\s/.test(block.trim())) {
-        return '<h3>' + block.trim().replace(/^#{1,6}\s+/, '') + '</h3>';
-      }
-      return '<p>' + block.trim().replace(/\n/g, '<br>') + '</p>';
-    }).join('');
-  });
-
-  return out;
+  // A library, not a set of regular expressions: headings, links, emphasis,
+  // lists, tables, quotes and rules all arrive as HTML without being taught one
+  // at a time. What comes back is sanitised, because it is about to be set as
+  // innerHTML and a reply is not trusted input.
+  if (!text) return '';
+  try {
+    return DOMPurify.sanitize(marked.parse(text, { breaks: true, gfm: true }));
+  } catch (err) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
 }
 
 function add(cls, text, tool) {

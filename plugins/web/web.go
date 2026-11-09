@@ -34,7 +34,7 @@ import (
 	"github.com/usually-broken/lola/core/tools"
 )
 
-//go:embed index.html
+//go:embed index.html assets
 var assets embed.FS
 
 // DefaultAddr is where the interface listens when nothing else is set. It is
@@ -204,6 +204,7 @@ func (u *ui) Run(ctx context.Context, rt frontend.Runtime) error {
 	u.registerCommands()
 
 	mux := http.NewServeMux()
+	mux.HandleFunc("/assets/", u.vendored)
 	mux.HandleFunc("/", u.index)
 	mux.HandleFunc("/api/state", u.state)
 	mux.HandleFunc("/api/prompt", u.promptGet)
@@ -243,6 +244,24 @@ func (u *ui) Run(ctx context.Context, rt frontend.Runtime) error {
 }
 
 // --- pages and data -------------------------------------------------------
+
+// vendored serves the scripts kept beside the page, so markdown is rendered by
+// a library rather than by hand and nothing is fetched from the network.
+func (u *ui) vendored(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimPrefix(r.URL.Path, "/assets/")
+	if name == "" || strings.Contains(name, "..") {
+		http.NotFound(w, r)
+		return
+	}
+	body, err := assets.ReadFile("assets/" + name)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store, max-age=0")
+	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+	_, _ = w.Write(body)
+}
 
 func (u *ui) index(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
