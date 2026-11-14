@@ -11,7 +11,12 @@ import (
 
 func tmpStore(t *testing.T) *Store {
 	t.Helper()
-	return NewStore(filepath.Join(t.TempDir(), "sessions", "sessions.db"))
+	dir := t.TempDir()
+	s := NewStore(filepath.Join(dir, "sessions", "sessions.db"))
+	// Windows will not remove a database the process still has open, so the
+	// handle is released before the temp folder is cleaned up.
+	t.Cleanup(func() { s.Close() })
+	return s
 }
 
 func msg(role llm.Role, content string) llm.Message {
