@@ -69,6 +69,18 @@ func NewStore(path string) *Store {
 // Path returns the database file the store reads and writes.
 func (s *Store) Path() string { return s.path }
 
+// TempStore returns a store in dir that releases its handle when the test
+// ends. Windows will not delete a database a process still has open, so a
+// temp store that is never closed fails the test's own cleanup.
+func TempStore(t interface {
+	TempDir() string
+	Cleanup(func())
+}, dir string) *Store {
+	s := NewStore(filepath.Join(dir, DefaultFile))
+	t.Cleanup(func() { s.Close() })
+	return s
+}
+
 // Close releases the database handle.
 func (s *Store) Close() error {
 	if s.db == nil {

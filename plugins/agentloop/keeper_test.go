@@ -1,7 +1,6 @@
 package agentloop
 
 import (
-	"path/filepath"
 	"testing"
 
 	"github.com/usually-broken/lola/core"
@@ -41,7 +40,7 @@ func (k aKeeper) Sessions() *session.Store     { return k.store }
 // The loop does not build a store of its own any more: it asks the tree, so the
 // loop and the interface the person is looking at write the same files.
 func TestTheLoopUsesTheStoreTheTreeOffers(t *testing.T) {
-	store := session.NewStore(filepath.Join(t.TempDir(), session.DefaultFile))
+	store := session.TempStore(t, t.TempDir())
 	p := &Plugin{plugins: &keeperTree{held: aKeeper{store: store}}}
 
 	if got := p.sessionStore(); got != store {
