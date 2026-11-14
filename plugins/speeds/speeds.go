@@ -8,15 +8,15 @@ package speeds
 import (
 	"encoding/json"
 	"net/http"
-	"os"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"time"
 
 	"github.com/usually-broken/lola/core"
+	"github.com/usually-broken/lola/core/llm"
 	"github.com/usually-broken/lola/core/plugin"
 	"github.com/usually-broken/lola/core/routes"
+	coresession "github.com/usually-broken/lola/core/session"
 )
 
 const (
@@ -135,7 +135,7 @@ func (p *Plugin) series(w http.ResponseWriter, r *http.Request) {
 		Streamed bool      `json:"streamed"`
 	}
 
-	found := samples(q.Get("session"), q.Get("window"))
+	found := samples(p.sessions, q.Get("session"), q.Get("window"))
 	out := make([]point, 0, len(found))
 	for i := len(found) - 1; i >= 0; i-- {
 		s := found[i]
@@ -160,7 +160,7 @@ func (p *Plugin) listSessions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ids := map[string]bool{}
-	for _, s := range samples("", "all") {
+	for _, s := range samples(p.sessions, "", "all") {
 		ids[s.session] = true
 	}
 
@@ -190,45 +190,31 @@ type sample struct {
 }
 
 // samples reads every stored reply and keeps the ones the window asks for.
-func samples(session, window string) []sample {
-	home, err := os.UserHomeDir()
-	if err != nil {
+//
+// It goes through the store the harness already has rather than reading the
+// files itself, so where conversations are kept stays the store's business.
+func samples(sessions plugin.Sessions, session, window string) []sample {
+	if sessions == nil {
 		return nil
 	}
-	paths, err := filepath.Glob(filepath.Join(home, ".lola", "sessions", "*.json"))
+	reader, ok := sessions.(interface {
+		ListFull() ([]*coresession.Session, error)
+	})
+	if !ok {
+		return nil
+	}
+	saved, err := reader.ListFull()
 	if err != nil {
 		return nil
 	}
 
-	found := make([]sample, 0, len(paths)*8)
-	for _, path := range paths {
-		body, err := os.ReadFile(path)
-		if err != nil {
+	found := make([]sample, 0, len(saved)*8)
+	for _, sess := range saved {
+		if session != "" && sess.ID != session {
 			continue
 		}
-		var stored struct {
-			ID       string `json:"id"`
-			Messages []struct {
-				Role   string `json:"role"`
-				Timing *struct {
-					FirstWordMS     int64     `json:"firstWordMs"`
-					TokensPerSecond float64   `json:"tokensPerSecond"`
-					Model           string    `json:"model"`
-					At              time.Time `json:"at"`
-					Tokens          int       `json:"tokens"`
-					Chunks          int       `json:"chunks"`
-				} `json:"timing"`
-			} `json:"messages"`
-		}
-		if json.Unmarshal(body, &stored) != nil {
-			continue
-		}
-		if session != "" && stored.ID != session {
-			continue
-		}
-
-		for _, m := range stored.Messages {
-			if m.Role != "assistant" || m.Timing == nil {
+		for _, m := range sess.Messages {
+			if m.Role != llm.RoleAssistant || m.Timing == nil {
 				continue
 			}
 			model := m.Timing.Model
@@ -252,7 +238,7 @@ func samples(session, window string) []sample {
 			found = append(found, sample{
 				model:    model,
 				at:       m.Timing.At,
-				session:  stored.ID,
+				session:  sess.ID,
 				firstMS:  m.Timing.FirstWordMS,
 				rate:     rate,
 				streamed: streamed,

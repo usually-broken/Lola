@@ -11,7 +11,12 @@ import (
 
 func tmpStore(t *testing.T) *Store {
 	t.Helper()
-	return NewStore(filepath.Join(t.TempDir(), "sessions"))
+	dir := t.TempDir()
+	s := NewStore(filepath.Join(dir, "sessions", "sessions.db"))
+	// Windows will not remove a database the process still has open, so the
+	// handle is released before the temp folder is cleaned up.
+	t.Cleanup(func() { s.Close() })
+	return s
 }
 
 func msg(role llm.Role, content string) llm.Message {
@@ -40,20 +45,25 @@ func TestSaveThenLoad(t *testing.T) {
 	}
 }
 
-func TestSaveIsHumanReadableJSON(t *testing.T) {
+func TestSaveWritesOneDatabaseFile(t *testing.T) {
 	s := tmpStore(t)
 	sess := &Session{Title: "readable", Messages: []llm.Message{msg(llm.RoleUser, "hi")}}
 	if err := s.Save(sess); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
 
-	data, err := os.ReadFile(filepath.Join(s.Dir(), sess.ID+".json"))
-	if err != nil {
-		t.Fatalf("read file: %v", err)
+	// Every session lives in the one database, not in a file each.
+	if _, err := os.Stat(s.Path()); err != nil {
+		t.Fatalf("database file: %v", err)
 	}
-	// Indented JSON, so a person can read it.
-	if !containsAll(string(data), "\n  \"id\"", "\"title\": \"readable\"") {
-		t.Fatalf("session file is not readable JSON:\n%s", data)
+	entries, err := os.ReadDir(filepath.Dir(s.Path()))
+	if err != nil {
+		t.Fatalf("list store: %v", err)
+	}
+	for _, e := range entries {
+		if filepath.Ext(e.Name()) == ".json" {
+			t.Fatalf("session written as JSON beside the database: %s", e.Name())
+		}
 	}
 }
 
@@ -155,8 +165,12 @@ func TestListSkipsUnreadableFiles(t *testing.T) {
 	if err := s.Save(good); err != nil {
 		t.Fatal(err)
 	}
-	// A junk file in the store must not hide the real sessions.
-	if err := os.WriteFile(filepath.Join(s.Dir(), "junk.json"), []byte("{not json"), 0o644); err != nil {
+	// A junk message row must not hide the real sessions.
+	db, err := s.open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO messages (session_id, position, role, body) VALUES ('good', 9, 'user', '{not json')`); err != nil {
 		t.Fatal(err)
 	}
 

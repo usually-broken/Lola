@@ -57,7 +57,7 @@ func newUI(t *testing.T, ag agent.Agent) *ui {
 	t.Helper()
 	u := &ui{
 		rt:      frontend.Runtime{Agent: ag, Model: "test-model", Plugins: []string{"a", "b"}, SessionsDir: t.TempDir()},
-		store:   session.NewStore(t.TempDir()),
+		store:   session.TempStore(t, t.TempDir()),
 		clients: make(map[chan event]struct{}),
 		pending: make(map[string]chan guard.Approval),
 	}
