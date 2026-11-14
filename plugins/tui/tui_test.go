@@ -31,7 +31,7 @@ func newTestUI(t *testing.T) *ui {
 		ConfigPath:  "lola.yaml",
 		SessionsDir: dir,
 	}
-	u.store = session.NewStore(dir)
+	u.store = session.NewStore(filepath.Join(dir, session.DefaultFile))
 	// The interface's commands, exactly as Run would register them.
 	u.commands = commands.New()
 	u.registerCommands()

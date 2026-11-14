@@ -1,6 +1,7 @@
 package sessions
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/usually-broken/lola/core/home"
@@ -12,7 +13,7 @@ import (
 // stops holding, the loop and the frontends quietly go back to building their
 // own stores and nobody notices until sessions disagree.
 func TestThePluginIsAKeeper(t *testing.T) {
-	var p any = &Plugin{store: session.NewStore(t.TempDir())}
+	var p any = &Plugin{store: session.NewStore(filepath.Join(t.TempDir(), session.DefaultFile))}
 	if _, ok := p.(session.Keeper); !ok {
 		t.Fatal("the sessions plugin is not a session.Keeper, so nothing can find it")
 	}
@@ -36,8 +37,9 @@ func TestItIsRegistered(t *testing.T) {
 // the loop writes is what the command line reads back rather than two folders
 // that happen to look alike.
 func TestTheStoreIsOverTheHomesSessionsFolder(t *testing.T) {
-	p := &Plugin{store: session.NewStore(home.SessionsDir())}
-	if got := p.Sessions().Dir(); got != home.SessionsDir() {
-		t.Fatalf("the store is over %q, want %q", got, home.SessionsDir())
+	p := &Plugin{store: session.NewStore(filepath.Join(home.SessionsDir(), session.DefaultFile))}
+	want := filepath.Join(home.SessionsDir(), session.DefaultFile)
+	if got := p.Sessions().Path(); got != want {
+		t.Fatalf("the store is over %q, want %q", got, want)
 	}
 }

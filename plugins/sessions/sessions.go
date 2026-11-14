@@ -10,6 +10,8 @@
 package sessions
 
 import (
+	"path/filepath"
+
 	"github.com/usually-broken/lola/core"
 	"github.com/usually-broken/lola/core/home"
 	"github.com/usually-broken/lola/core/plugin"
@@ -18,7 +20,7 @@ import (
 
 func init() {
 	plugin.Register("sessions", func(plugin.Deps) (core.Plugin, error) {
-		return &Plugin{store: session.NewStore(home.SessionsDir())}, nil
+		return &Plugin{store: session.NewStore(filepath.Join(home.SessionsDir(), session.DefaultFile))}, nil
 	})
 }
 

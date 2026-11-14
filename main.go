@@ -111,6 +111,15 @@ func (s *sessionsOf) List() ([]plugin.SessionInfo, error) {
 	return out, nil
 }
 
+// ListFull is every saved conversation with its messages, for a caller that
+// reads replies rather than drawing a list: speeds plots them.
+func (s *sessionsOf) ListFull() ([]*session.Session, error) {
+	if s.store == nil {
+		return nil, fmt.Errorf("no conversation store")
+	}
+	return s.store.List()
+}
+
 // Delete removes one conversation by id.
 func (s *sessionsOf) Delete(id string) error {
 	if s.store == nil {
